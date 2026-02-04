@@ -22,7 +22,8 @@ Load cloud variables (project ID, BigQuery dataset, etc)
 - creates materialize BigQuery table
   - filters from input (basin, year)
   - calculates unique row ID (hash of sid + timestamp)
-- merges table into target_table if row doesn't already exist
+- merges table into BigQuery `target_table` if row doesn't already exist
+- optionally drop materialized BigQuery table
 
 ### [04_gcp_cockreachdb.yaml](./flows/04_gcp_cockroachdb.yaml)
 

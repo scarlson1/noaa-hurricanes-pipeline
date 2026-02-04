@@ -28,12 +28,18 @@ inputs:
     displayName: BigQuery Table
     defaults: 'hurricanes'
 
+  - id: delete_temp_bq_table
+    type: BOOL
+    displayName: Delete intermediate BigQuery Table
+    default: true
+
 variables:
   file: "ibtracs.{{inputs.dataset}}.list.v04r01.csv"
   # gcs_file: "gs://{{kv('GCP_BUCKET_NAME')}}/{{var.file}}"
   gcs_file: "gs://{{kv('GCP_BUCKET_NAME')}}/{{inputs.dataset}}.csv"
-  table: "{{kv('GCP_DATASET')}}.hurricanes_{{inputs.dataset}}"
-  data: "{{outputs.download_csv.outputFiles['ibtracs.' ~ inputs.dataset ~ '.list.v04r01.csv']}}"
+  int_table_name: "hurricanes_{{inputs.dataset}}"
+  table: "{{ kv('GCP_DATASET') }}.{{vars.int_table_name}}"
+  data: "{{ outputs.download_csv.outputFiles['ibtracs.' ~ inputs.dataset ~ '.list.v04r01.csv']}}"
   # data: "{{outputs.extract.outputFiles['ibtracs.' ~ inputs.dataset ~ '.list.v04r01.csv']}}"
   # data: "{{outputs.extract.outputFiles[inputs.dataset ~ '_paths_' ~ inputs.year ~ '-' ~ inputs.basin ~ '.csv']}}"
   # ibtracs.last3years.list.v04r01.csv
@@ -45,7 +51,7 @@ tasks:
     type: io.kestra.plugin.core.execution.Labels
     labels: 
       file: "{{render(vars.file)}}"
-      dataset: "{{inputs.dataset}}"
+      dataset: "{{ inputs.dataset }}"
 
   - id: download_csv
     type: io.kestra.plugin.scripts.shell.Commands
@@ -54,7 +60,7 @@ tasks:
     taskRunner:
       type: io.kestra.plugin.core.runner.Process
     commands:
-      - wget -qO- https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/ibtracs.{{inputs.dataset}}.list.v04r01.csv > {{render(vars.file)}}
+      - wget -qO- https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/ibtracs.{{ inputs.dataset }}.list.v04r01.csv > {{ render(vars.file) }}
 
   # alternatively use wget or io.kestra.plugin.fs.local.Download if running locally
   # - id: download_csv
@@ -68,16 +74,9 @@ tasks:
 
   - id: upload_to_gcs
     type: io.kestra.plugin.gcp.gcs.Upload
-    from: "{{render(vars.data)}}"
-    to: "{{render(vars.gcs_file)}}"
+    from: "{{ render(vars.data) }}"
+    to: "{{ render(vars.gcs_file) }}"
     # from: "{{ outputs.download_csv.uri }}"
-    # to: "{{render(vars.gcs_file)}}"
-
-    # TODO: add calculated column to cockroach db to avoid duplicates
-    # ALTER TABLE products ADD COLUMN total_value DECIMAL(12, 2) AS (price * quantity) STORED;
-    # ALTER TABLE hurricane_data ADD COLUMN unique_row_id VARCHAR(32) AS MD5(CONCAT(sid, COALESCE(CAST(iso_time AS STRING), ""))) STORED;
-    # OR
-    # update all columns ?? computed columns cannot be written to directly
 
   # filter to selected year & selected basin
   - id: bq_table_create
@@ -180,7 +179,7 @@ tasks:
   - id: bq_merge
     type: io.kestra.plugin.gcp.bigquery.Query
     sql: |
-      MERGE INTO `{{ kv('GCP_PROJECT_ID') }}.{{ kv('GCP_DATASET') }}.hurricanes` T
+      MERGE INTO `{{ kv('GCP_PROJECT_ID') }}.{{ kv('GCP_DATASET') }}.{{ inputs.target_table }}` T
       USING `{{ kv('GCP_PROJECT_ID') }}.{{ render(vars.table) }}` S
       on T.unique_row_id = S.unique_row_id
       WHEN NOT MATCHED THEN
@@ -212,6 +211,15 @@ tasks:
           S.usa_status,
           S.timestamp
         );
+
+  - id: if_yellow_taxi
+    type: io.kestra.plugin.core.flow.If
+    condition: "{{ inputs.delete_temp_bq_table }}"
+    then:
+      - id: delete_table
+        type: io.kestra.plugin.gcp.bigquery.DeleteTable
+        dataset: "{{ kv('GCP_DATASET') }}"
+        table: "{{ vars.int_table_name }}"
 
   - id: purge_files
     type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
