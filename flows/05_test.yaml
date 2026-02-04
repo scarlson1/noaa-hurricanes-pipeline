@@ -1,4 +1,4 @@
-id: 04_gcp_cockroachdb
+id: 05_test
 namespace: hurricanes
 description: |
   Import data into cochroach db
@@ -66,6 +66,7 @@ tasks:
           HAVING MAX(usa_sshs) >= 1
         )
         AND season = '{{ inputs.year }}'
+        AND sid = '2025291N11319'
 
   - id: export_curated_to_gcs
     type: io.kestra.plugin.gcp.bigquery.ExtractToGcs
@@ -135,14 +136,6 @@ tasks:
     header: true
     delimiter: ","
 
-  - id: count_pre_merge
-    type: io.kestra.plugin.jdbc.postgresql.Query
-    url: "{{ render(vars.crdb_jdbc_url) }}"
-    username: "{{ render(vars.db_user) }}"
-    password: "{{ secret('COCKROACH_PASSWORD') }}"
-    sql: |
-      SELECT COUNT(*) FROM {{ render(vars.target_table) }}; 
-
   - id: upsert_to_destination
     type: io.kestra.plugin.jdbc.postgresql.Query
     url: "{{ render(vars.crdb_jdbc_url) }}"
@@ -179,14 +172,6 @@ tasks:
       FROM {{ render(vars.crdb_stage_table )}}
       ON CONFLICT (unique_row_id) DO NOTHING;
 
-  - id: count_post_merge
-    type: io.kestra.plugin.jdbc.postgresql.Query
-    url: "{{ render(vars.crdb_jdbc_url) }}"
-    username: "{{ render(vars.db_user) }}"
-    password: "{{ secret('COCKROACH_PASSWORD') }}"
-    sql: |
-      SELECT COUNT(*) FROM {{ render(vars.target_table) }}; 
-
   - id: truncate_stage
     type: io.kestra.plugin.jdbc.postgresql.Query
     url: "{{ render(vars.crdb_jdbc_url) }}"
@@ -194,10 +179,6 @@ tasks:
     password: "{{ secret('COCKROACH_PASSWORD') }}"
     sql: |
       TRUNCATE TABLE {{ render(vars.crdb_stage_table )}};
-
-  - id: notify_download_complete_added_count
-    type: io.kestra.plugin.core.log.Log
-    message: "Added {{ outputs.count_post_merge.value - outputs.count_pre_merge.value }} new rows"
 
   # - id: load_into_cockroach
   #   type: io.kestra.plugin.jdbc.postgresql.Batch

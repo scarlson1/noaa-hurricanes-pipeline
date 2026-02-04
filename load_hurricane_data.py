@@ -6,14 +6,13 @@ from google.cloud import storage
 from google.api_core.exceptions import NotFound, Forbidden
 import time
 
-# NOT USED - DELETE ??
-
+# NOT USED - TODO: DELETE ??
 
 # Change this to your bucket name
 BUCKET_NAME = "hurricane_data"
 
 # If you authenticated through the GCP SDK you can comment out these two lines
-CREDENTIALS_FILE = "historical-paths-service-account.json"
+CREDENTIALS_FILE = "service-account.json"
 client = storage.Client.from_service_account_json(CREDENTIALS_FILE)
 # If commented initialize client with the following
 # client = storage.Client(project='zoomcamp-mod3-datawarehouse')
