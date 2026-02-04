@@ -1,0 +1,248 @@
+id: 04_gcp_cockroachdb
+namespace: hurricanes
+description: |
+  Import data into cochroach db
+
+inputs:
+  - id: year
+    type: SELECT
+    displayName: Select year
+    values: [2023, 2024, 2025, 2026, 2027, 2028, 2029, 2030]
+    defaults: 2025
+    allowCustomValue: true
+
+  - id: min_category
+    type: SELECT
+    displayName: Min Category
+    values: [-2,-1,0,1,2,3,4,5]
+    defaults: 1
+
+  # - id: bq_curated_table
+  #   type: STRING
+  #   defaults: "hurricane_curated_import"
+  #   description: "Curated BigQuery table name."
+
+variables:
+  bq_table: "{{ kv('GCP_PROJECT_ID')}}.{{kv('GCP_DATASET')}}.hurricanes"
+  bq_curated_table: "{{ kv('GCP_PROJECT_ID')}}.{{kv('GCP_DATASET')}}.hurricane_curated_import"
+  target_table: "hurricane_data"
+  crdb_stage_table: "hurricane_data_staging"
+  database: "historical_paths"
+  db_user: "spencer"
+  db_host: "idemand-db-cluster-14272.5xj.gcp-us-central1.cockroachlabs.cloud"
+  db_port: "26257"
+  crdb_jdbc_url: jdbc:postgresql://{{ render(vars.db_host) }}:{{ render(vars.db_port) }}/{{ render(vars.database) }}?sslmode=verify-full&sslrootcert=/app/certs/root.crt
+  file: "hurricanes_{{inputs.year}}_min_cat_{{inputs.min_category}}.csv"
+  gcs_file: "gs://{{kv('GCP_BUCKET_NAME')}}/{{vars.file}}"
+
+tasks:
+  # get data that has minimum sshs of at least 1
+  # CREATE OR REPLACE TABLE `{{ kv('GCP_PROJECT_ID') }}.{{ render(vars.table) }}_{{ inputs.year }}_min{{ inputs.min_category }}_tmp`
+      # AS
+  - id: extract_from_bigquery
+    type: io.kestra.plugin.gcp.bigquery.Query
+    # fetchType: STORE
+    sql: |
+      CREATE OR REPLACE TABLE `{{ render(vars.bq_curated_table) }}` AS
+      SELECT
+        name,
+        CAST(sid AS STRING) AS sid,
+        basin,
+        CAST(season AS INT64) AS season,
+        FORMAT_TIMESTAMP("%Y-%m-%d %H:%M:%S %Z", iso_time, "UTC") as iso_time,
+        CAST(usa_sshs AS INT64) usa_sshs,
+        nature,
+        latitude,
+        longitude,
+        usa_status,
+        timestamp,
+        unique_row_id
+      FROM `{{ render(vars.bq_table) }}`
+      WHERE 
+        sid IN (
+          SELECT sid
+          FROM `{{ render(vars.bq_table) }}`
+          GROUP BY sid
+          HAVING MAX(usa_sshs) >= 1
+        )
+        AND season = '{{ inputs.year }}'
+
+  - id: export_curated_to_gcs
+    type: io.kestra.plugin.gcp.bigquery.ExtractToGcs
+    sourceTable: "{{ render(vars.bq_curated_table) }}"
+    destinationUris:
+      - "{{ render(vars.gcs_file) }}"
+    format: CSV
+    fieldDelimiter: ","
+    printHeader: true
+
+  - id: download_export_for_copy
+    type: io.kestra.plugin.gcp.gcs.Download
+    from: "{{ render(vars.gcs_file) }}"
+
+  - id: create_crdb_stage_table
+    type: io.kestra.plugin.jdbc.postgresql.Query
+    url: "{{ render(vars.crdb_jdbc_url) }}"
+    username: "{{ render(vars.db_user) }}"
+    password: "{{ secret('COCKROACH_PASSWORD') }}"
+    sql: |
+      DROP TABLE IF EXISTS {{ render(vars.crdb_stage_table) }};
+      CREATE TABLE IF NOT EXISTS {{ render(vars.crdb_stage_table) }} (
+        name STRING,
+        sid STRING,
+        basin STRING,
+        season STRING,
+        iso_time STRING,
+        usa_sshs STRING,
+        nature STRING,
+        latitude FLOAT,
+        longitude FLOAT,
+        usa_status STRING,
+        "timestamp" TIMESTAMPTZ,
+        unique_row_id STRING
+      );
+    # sql: |
+    #   CREATE TABLE IF NOT EXISTS {{ render(vars.crdb_stage_table )}} (
+    #     name STRING,
+    #     sid STRING,
+    #     basin STRING,
+    #     season INT,
+    #     iso_time STRING,
+    #     usa_sshs INT,
+    #     nature STRING,
+    #     latitude FLOAT,
+    #     longitude FLOAT,
+    #     usa_status STRING,
+    #     "timestamp" TIMESTAMPTZ,
+    #     unique_row_id STRING
+    #   );
+
+  - id: copy_to_stage
+    type: io.kestra.plugin.jdbc.postgresql.CopyIn
+    url: "{{ render(vars.crdb_jdbc_url) }}"
+    username: "{{ render(vars.db_user )}}"
+    password: "{{ secret('COCKROACH_PASSWORD') }}"
+    format: CSV
+    from: "{{ outputs.download_export_for_copy.uri }}"
+    table: "{{ render(vars.crdb_stage_table )}}"
+    header: true
+    delimiter: ","
+
+  - id: upsert_to_destination
+    type: io.kestra.plugin.jdbc.postgresql.Query
+    url: "{{ render(vars.crdb_jdbc_url) }}"
+    # url: jdbc:postgresql://{{ render(vars.db_host)}}:{{ render(vars.db_port) }}/{{ render(vars.database) }}?sslmode=verify-full&sslrootcert=/app/certs/root.crt
+    username: "{{ render(vars.db_user )}}"
+    password: "{{ secret('COCKROACH_PASSWORD') }}"
+    sql: |
+      INSERT INTO {{ inputs.target_table }} (
+        name,
+        sid,
+        basin,
+        season,
+        iso_time,
+        usa_sshs,
+        nature,
+        latitude,
+        longitude,
+        usa_status,
+        timestamp,
+        unique_row_id
+      )
+      SELECT
+        name,
+        sid,
+        basin,
+        season,
+        iso_time,
+        usa_sshs,
+        nature,
+        latitude,
+        longitude,
+        usa_status,
+        timestamp,
+        unique_row_id
+      FROM {{ render(vars.crdb_stage_table )}}
+      ON CONFLICT (unique_row_id) DO NOTHING;
+
+  - id: truncate_stage
+    type: io.kestra.plugin.jdbc.postgresql.Query
+    url: "{{ render(vars.crdb_jdbc_url) }}"
+    username: "{{ render(vars.db_user )}}"
+    password: "{{ secret('COCKROACH_PASSWORD') }}"
+    sql: |
+      TRUNCATE TABLE {{ render(vars.crdb_stage_table )}};
+
+  # - id: load_into_cockroach
+  #   type: io.kestra.plugin.jdbc.postgresql.Batch
+  #   url: jdbc:postgresql://{{ render(vars.db_host)}}:{{ render(vars.db_port) }}/{{ render(vars.database) }}?sslmode=verify-full&sslrootcert=/app/certs/root.crt
+  #   username: "{{ render(vars.db_user )}}"
+  #   password: "{{ secret('COCKROACH_PASSWORD') }}"
+  #   # sslRootCert: /app/certs/root.crt
+  #   # sslCert: /app/certs/client.crt
+  #   # sslKey: /app/certs/client.key
+  #   from: "{{ outputs.extract_from_bigquery.uri }}"
+  #   sql: |
+  #     INSERT INTO {{ vars.target_table }} 
+  #     VALUES (
+  #       ?,
+  #       ?,
+  #       ?,
+  #       ?,
+  #       ?,
+  #       ?,
+  #       ?,
+  #       ?,
+  #       ?,
+  #       ?,
+  #       ?,
+  #       ?
+  #     )
+  #     ON CONFLICT (unique_row_id) DO NOTHING;
+    # sql: |
+    #   INSERT INTO {{ vars.target_table }} (
+    #     name,
+    #     sid,
+    #     basin,
+    #     season,
+    #     iso_time,
+    #     usa_sshs,
+    #     nature,
+    #     latitude,
+    #     longitude,
+    #     usa_status,
+    #     timestamp,
+    #     unique_row_id,
+    #     year,
+    #     category
+    #   )
+    #   VALUES (
+    #     :name, 
+    #     :sid, 
+    #     :basin, 
+    #     :season, 
+    #     :iso_time, 
+    #     :usa_sshs, 
+    #     :nature, 
+    #     :latitude::NUMERIC, 
+    #     :longitude::NUMERIC, 
+    #     :usa_status, 
+    #     :timestamp, 
+    #     :unique_row_id,
+    #     :year, 
+    #     :category
+    #   )
+    #   ON CONFLICT (unique_row_id) DO NOTHING;
+
+  - id: purge_files
+    type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
+    description: If you'd like to explore Kestra outputs, disable it.
+    disabled: false
+
+pluginDefaults:
+  - type: io.kestra.plugin.gcp
+    values:
+      serviceAccount: "{{ secret('GCP_SERVICE_ACCOUNT') }}"
+      projectId: "{{kv('GCP_PROJECT_ID')}}"
+      location: "{{kv('GCP_LOCATION')}}"
+      bucket: "{{kv('GCP_BUCKET_NAME')}}"
