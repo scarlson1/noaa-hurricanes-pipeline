@@ -108,21 +108,6 @@ tasks:
         "timestamp" TIMESTAMPTZ,
         unique_row_id STRING
       );
-    # sql: |
-    #   CREATE TABLE IF NOT EXISTS {{ render(vars.crdb_stage_table )}} (
-    #     name STRING,
-    #     sid STRING,
-    #     basin STRING,
-    #     season INT,
-    #     iso_time STRING,
-    #     usa_sshs INT,
-    #     nature STRING,
-    #     latitude FLOAT,
-    #     longitude FLOAT,
-    #     usa_status STRING,
-    #     "timestamp" TIMESTAMPTZ,
-    #     unique_row_id STRING
-    #   );
 
   - id: copy_to_stage
     type: io.kestra.plugin.jdbc.postgresql.CopyIn
