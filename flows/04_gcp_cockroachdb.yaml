@@ -17,11 +17,6 @@ inputs:
     values: [-2,-1,0,1,2,3,4,5]
     defaults: 1
 
-  # - id: bq_curated_table
-  #   type: STRING
-  #   defaults: "hurricane_curated_import"
-  #   description: "Curated BigQuery table name."
-
 variables:
   bq_table: "{{ kv('GCP_PROJECT_ID')}}.{{kv('GCP_DATASET')}}.hurricanes"
   bq_curated_table: "{{ kv('GCP_PROJECT_ID')}}.{{kv('GCP_DATASET')}}.hurricane_curated_import"
