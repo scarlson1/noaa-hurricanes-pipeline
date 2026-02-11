@@ -7,8 +7,8 @@ inputs:
   - id: dataset
     type: SELECT
     displayName: Select NOAA dataset
-    values: ["last3years", "NA", "WP", "ACTIVE"]
-    defaults: "last3years"
+    values: ['last3years', 'NA', 'WP', 'ACTIVE']
+    defaults: 'last3years'
 
   - id: year
     type: SELECT
@@ -20,8 +20,8 @@ inputs:
   - id: basin
     type: SELECT
     displayName: Select Basin
-    values: ["NA", "EP"]
-    defaults: "NA"
+    values: ['NA', 'EP']
+    defaults: 'NA'
 
   - id: target_table
     type: STRING
@@ -34,10 +34,10 @@ inputs:
     default: true
 
 variables:
-  file: "ibtracs.{{inputs.dataset}}.list.v04r01.csv"
+  file: 'ibtracs.{{inputs.dataset}}.list.v04r01.csv'
   # gcs_file: "gs://{{kv('GCP_BUCKET_NAME')}}/{{var.file}}"
   gcs_file: "gs://{{kv('GCP_BUCKET_NAME')}}/{{inputs.dataset}}.csv"
-  int_table_name: "hurricanes_{{inputs.dataset}}"
+  int_table_name: 'hurricanes_{{inputs.dataset}}'
   table: "{{ kv('GCP_DATASET') }}.{{vars.int_table_name}}"
   data: "{{ outputs.download_csv.outputFiles['ibtracs.' ~ inputs.dataset ~ '.list.v04r01.csv']}}"
   # data: "{{outputs.extract.outputFiles['ibtracs.' ~ inputs.dataset ~ '.list.v04r01.csv']}}"
@@ -49,14 +49,14 @@ variables:
 tasks:
   - id: set_label
     type: io.kestra.plugin.core.execution.Labels
-    labels: 
-      file: "{{render(vars.file)}}"
-      dataset: "{{ inputs.dataset }}"
+    labels:
+      file: '{{render(vars.file)}}'
+      dataset: '{{ inputs.dataset }}'
 
   - id: download_csv
     type: io.kestra.plugin.scripts.shell.Commands
     outputFiles:
-      - "*.csv"
+      - '*.csv'
     taskRunner:
       type: io.kestra.plugin.core.runner.Process
     commands:
@@ -67,15 +67,13 @@ tasks:
   #   type: io.kestra.plugin.core.http.Download
   #   uri: https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/ibtracs.{{inputs.dataset}}.list.v04r01.csv
   #   # saveAs: "{{render(vars.data)}}"
-
   # - id: notify_download_complete
   #   type: io.kestra.plugin.core.log.Log
   #   message: "Downloaded file URI: {{ outputs.download_csv.uri }}"
-
   - id: upload_to_gcs
     type: io.kestra.plugin.gcp.gcs.Upload
-    from: "{{ render(vars.data) }}"
-    to: "{{ render(vars.gcs_file) }}"
+    from: '{{ render(vars.data) }}'
+    to: '{{ render(vars.gcs_file) }}'
     # from: "{{ outputs.download_csv.uri }}"
 
   # filter to selected year & selected basin
@@ -98,11 +96,11 @@ tasks:
         timestamp STRING OPTIONS (description = 'Event data point timestamp')
       )
 
-# cockroachDB calculated columns
-# point_id UUID NOT NULL DEFAULT gen_random_uuid(),
-# rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-# year INTEGER NULL AS (season),
-# category INTEGER NULL AS (usa_sshs)
+  # cockroachDB calculated columns
+  # point_id UUID NOT NULL DEFAULT gen_random_uuid(),
+  # rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  # year INTEGER NULL AS (season),
+  # category INTEGER NULL AS (usa_sshs)
 
   # create external BigQuery table (external = stored in GCS)
   - id: bq_hurricane_data_ext
@@ -173,8 +171,8 @@ tasks:
         AND basin LIKE '{{inputs.basin}}'
         AND lat IS NOT NULL
         AND lon IS NOT NULL;
-# ORDER BY iso_time ASC
-# FORMAT_TIMESTAMP("%Y-%m-%dT%H:%M:%E*S%Ez", iso_time, "UTC")
+  # ORDER BY iso_time ASC
+  # FORMAT_TIMESTAMP("%Y-%m-%dT%H:%M:%E*S%Ez", iso_time, "UTC")
 
   - id: bq_merge
     type: io.kestra.plugin.gcp.bigquery.Query
@@ -214,17 +212,23 @@ tasks:
 
   - id: if_yellow_taxi
     type: io.kestra.plugin.core.flow.If
-    condition: "{{ inputs.delete_temp_bq_table }}"
+    condition: '{{ inputs.delete_temp_bq_table }}'
     then:
       - id: delete_table
         type: io.kestra.plugin.gcp.bigquery.DeleteTable
         dataset: "{{ kv('GCP_DATASET') }}"
-        table: "{{ vars.int_table_name }}"
+        table: '{{ vars.int_table_name }}'
 
   - id: purge_files
     type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
     description: If you'd like to explore Kestra outputs, disable it.
     disabled: false
+
+finally:
+  - id: notify
+    type: io.kestra.plugin.notifications.slack.SlackIncomingWebhook
+    url: "{{ secret('SLACK_WEBHOOK_URL') }}"
+    payload: '{"text": "Flow {{ flow.id }} finished with status {{ flow.state }}!"}'
 
 pluginDefaults:
   - type: io.kestra.plugin.gcp

@@ -14,26 +14,26 @@ inputs:
   - id: min_category
     type: SELECT
     displayName: Min Category
-    values: [-2,-1,0,1,2,3,4,5]
+    values: [-2, -1, 0, 1, 2, 3, 4, 5]
     defaults: 1
 
 variables:
   bq_table: "{{ kv('GCP_PROJECT_ID')}}.{{kv('GCP_DATASET')}}.hurricanes"
   bq_curated_table: "{{ kv('GCP_PROJECT_ID')}}.{{kv('GCP_DATASET')}}.hurricane_curated_import"
-  target_table: "hurricane_data"
-  crdb_stage_table: "hurricane_data_staging"
-  database: "historical_paths"
-  db_user: "spencer"
-  db_host: "idemand-db-cluster-14272.5xj.gcp-us-central1.cockroachlabs.cloud"
-  db_port: "26257"
+  target_table: 'hurricane_data'
+  crdb_stage_table: 'hurricane_data_staging'
+  database: 'historical_paths'
+  db_user: 'spencer'
+  db_host: 'idemand-db-cluster-14272.5xj.gcp-us-central1.cockroachlabs.cloud'
+  db_port: '26257'
   crdb_jdbc_url: jdbc:postgresql://{{ render(vars.db_host) }}:{{ render(vars.db_port) }}/{{ render(vars.database) }}?sslmode=verify-full&sslrootcert=/app/certs/root.crt
-  file: "hurricanes_{{inputs.year}}_min_cat_{{inputs.min_category}}.csv"
+  file: 'hurricanes_{{inputs.year}}_min_cat_{{inputs.min_category}}.csv'
   gcs_file: "gs://{{kv('GCP_BUCKET_NAME')}}/{{vars.file}}"
 
 tasks:
   # get data that has minimum sshs of at least 1
   # CREATE OR REPLACE TABLE `{{ kv('GCP_PROJECT_ID') }}.{{ render(vars.table) }}_{{ inputs.year }}_min{{ inputs.min_category }}_tmp`
-      # AS
+  # AS
   - id: extract_from_bigquery
     type: io.kestra.plugin.gcp.bigquery.Query
     # fetchType: STORE
@@ -64,29 +64,29 @@ tasks:
 
   - id: export_curated_to_gcs
     type: io.kestra.plugin.gcp.bigquery.ExtractToGcs
-    sourceTable: "{{ render(vars.bq_curated_table) }}"
+    sourceTable: '{{ render(vars.bq_curated_table) }}'
     destinationUris:
-      - "{{ render(vars.gcs_file) }}"
+      - '{{ render(vars.gcs_file) }}'
     format: CSV
-    fieldDelimiter: ","
+    fieldDelimiter: ','
     printHeader: true
 
   - id: download_export_for_copy
     type: io.kestra.plugin.gcp.gcs.Download
-    from: "{{ render(vars.gcs_file) }}"
+    from: '{{ render(vars.gcs_file) }}'
 
   - id: drop_crdb_stage_table
     type: io.kestra.plugin.jdbc.postgresql.Query
-    url: "{{ render(vars.crdb_jdbc_url) }}"
-    username: "{{ render(vars.db_user) }}"
+    url: '{{ render(vars.crdb_jdbc_url) }}'
+    username: '{{ render(vars.db_user) }}'
     password: "{{ secret('COCKROACH_PASSWORD') }}"
     sql: |
       DROP TABLE IF EXISTS {{ render(vars.crdb_stage_table) }};
 
   - id: create_crdb_stage_table
     type: io.kestra.plugin.jdbc.postgresql.Query
-    url: "{{ render(vars.crdb_jdbc_url) }}"
-    username: "{{ render(vars.db_user) }}"
+    url: '{{ render(vars.crdb_jdbc_url) }}'
+    username: '{{ render(vars.db_user) }}'
     password: "{{ secret('COCKROACH_PASSWORD') }}"
     sql: |
       CREATE TABLE IF NOT EXISTS {{ render(vars.crdb_stage_table) }} (
@@ -106,27 +106,27 @@ tasks:
 
   - id: copy_to_stage
     type: io.kestra.plugin.jdbc.postgresql.CopyIn
-    url: "{{ render(vars.crdb_jdbc_url) }}"
-    username: "{{ render(vars.db_user )}}"
+    url: '{{ render(vars.crdb_jdbc_url) }}'
+    username: '{{ render(vars.db_user )}}'
     password: "{{ secret('COCKROACH_PASSWORD') }}"
     format: CSV
-    from: "{{ outputs.download_export_for_copy.uri }}"
-    table: "{{ render(vars.crdb_stage_table )}}"
+    from: '{{ outputs.download_export_for_copy.uri }}'
+    table: '{{ render(vars.crdb_stage_table )}}'
     header: true
-    delimiter: ","
+    delimiter: ','
 
   - id: count_pre_merge
     type: io.kestra.plugin.jdbc.postgresql.Query
-    url: "{{ render(vars.crdb_jdbc_url) }}"
-    username: "{{ render(vars.db_user) }}"
+    url: '{{ render(vars.crdb_jdbc_url) }}'
+    username: '{{ render(vars.db_user) }}'
     password: "{{ secret('COCKROACH_PASSWORD') }}"
     sql: |
-      SELECT COUNT(*) FROM {{ render(vars.target_table) }}; 
+      SELECT COUNT(*) FROM {{ render(vars.target_table) }};
 
   - id: upsert_to_destination
     type: io.kestra.plugin.jdbc.postgresql.Query
-    url: "{{ render(vars.crdb_jdbc_url) }}"
-    username: "{{ render(vars.db_user )}}"
+    url: '{{ render(vars.crdb_jdbc_url) }}'
+    username: '{{ render(vars.db_user )}}'
     password: "{{ secret('COCKROACH_PASSWORD') }}"
     sql: |
       INSERT INTO {{ render(vars.target_table) }} (
@@ -161,23 +161,23 @@ tasks:
 
   - id: count_post_merge
     type: io.kestra.plugin.jdbc.postgresql.Query
-    url: "{{ render(vars.crdb_jdbc_url) }}"
-    username: "{{ render(vars.db_user) }}"
+    url: '{{ render(vars.crdb_jdbc_url) }}'
+    username: '{{ render(vars.db_user) }}'
     password: "{{ secret('COCKROACH_PASSWORD') }}"
     sql: |
-      SELECT COUNT(*) FROM {{ render(vars.target_table) }}; 
+      SELECT COUNT(*) FROM {{ render(vars.target_table) }};
 
   - id: truncate_stage
     type: io.kestra.plugin.jdbc.postgresql.Query
-    url: "{{ render(vars.crdb_jdbc_url) }}"
-    username: "{{ render(vars.db_user )}}"
+    url: '{{ render(vars.crdb_jdbc_url) }}'
+    username: '{{ render(vars.db_user )}}'
     password: "{{ secret('COCKROACH_PASSWORD') }}"
     sql: |
       TRUNCATE TABLE {{ render(vars.crdb_stage_table )}};
 
   - id: notify_download_complete_added_count
     type: io.kestra.plugin.core.log.Log
-    message: "Added {{ outputs.count_post_merge.value - outputs.count_pre_merge.value }} new rows"
+    message: 'Added {{ outputs.count_post_merge.value - outputs.count_pre_merge.value }} new rows'
 
   # - id: load_into_cockroach
   #   type: io.kestra.plugin.jdbc.postgresql.Batch
@@ -189,7 +189,7 @@ tasks:
   #   # sslKey: /app/certs/client.key
   #   from: "{{ outputs.extract_from_bigquery.uri }}"
   #   sql: |
-  #     INSERT INTO {{ vars.target_table }} 
+  #     INSERT INTO {{ vars.target_table }}
   #     VALUES (
   #       ?,
   #       ?,
@@ -205,45 +205,51 @@ tasks:
   #       ?
   #     )
   #     ON CONFLICT (unique_row_id) DO NOTHING;
-    # sql: |
-    #   INSERT INTO {{ vars.target_table }} (
-    #     name,
-    #     sid,
-    #     basin,
-    #     season,
-    #     iso_time,
-    #     usa_sshs,
-    #     nature,
-    #     latitude,
-    #     longitude,
-    #     usa_status,
-    #     timestamp,
-    #     unique_row_id,
-    #     year,
-    #     category
-    #   )
-    #   VALUES (
-    #     :name, 
-    #     :sid, 
-    #     :basin, 
-    #     :season, 
-    #     :iso_time, 
-    #     :usa_sshs, 
-    #     :nature, 
-    #     :latitude::NUMERIC, 
-    #     :longitude::NUMERIC, 
-    #     :usa_status, 
-    #     :timestamp, 
-    #     :unique_row_id,
-    #     :year, 
-    #     :category
-    #   )
-    #   ON CONFLICT (unique_row_id) DO NOTHING;
+  # sql: |
+  #   INSERT INTO {{ vars.target_table }} (
+  #     name,
+  #     sid,
+  #     basin,
+  #     season,
+  #     iso_time,
+  #     usa_sshs,
+  #     nature,
+  #     latitude,
+  #     longitude,
+  #     usa_status,
+  #     timestamp,
+  #     unique_row_id,
+  #     year,
+  #     category
+  #   )
+  #   VALUES (
+  #     :name,
+  #     :sid,
+  #     :basin,
+  #     :season,
+  #     :iso_time,
+  #     :usa_sshs,
+  #     :nature,
+  #     :latitude::NUMERIC,
+  #     :longitude::NUMERIC,
+  #     :usa_status,
+  #     :timestamp,
+  #     :unique_row_id,
+  #     :year,
+  #     :category
+  #   )
+  #   ON CONFLICT (unique_row_id) DO NOTHING;
 
   - id: purge_files
     type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
     description: If you'd like to explore Kestra outputs, disable it.
     disabled: false
+
+finally:
+  - id: notify
+    type: io.kestra.plugin.notifications.slack.SlackIncomingWebhook
+    url: "{{ secret('SLACK_WEBHOOK_URL') }}"
+    payload: '{"text": "Flow {{ flow.id }} finished with status {{ flow.state }}!"}'
 
 pluginDefaults:
   - type: io.kestra.plugin.gcp
