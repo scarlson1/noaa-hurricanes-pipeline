@@ -44,7 +44,13 @@ variables:
   # data: "{{outputs.extract.outputFiles[inputs.dataset ~ '_paths_' ~ inputs.year ~ '-' ~ inputs.basin ~ '.csv']}}"
   # ibtracs.last3years.list.v04r01.csv
 
-# https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/ibtracs.last3years.list.v04r01.csv
+# https://kestra.io/docs/workflow-components/triggers/schedule-trigger
+triggers:
+  - id: schedule
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: '@monthly'
+    timezone: America/Chicago
+    recoverMissedSchedules: NONE
 
 tasks:
   - id: set_label
@@ -225,10 +231,18 @@ tasks:
     disabled: false
 
 finally:
-  - id: notify
-    type: io.kestra.plugin.notifications.slack.SlackIncomingWebhook
-    url: "{{ secret('SLACK_WEBHOOK_URL') }}"
-    payload: '{"text": "Flow {{ flow.id }} finished with status {{ flow.state }}!"}'
+  - id: notify_if_slack_webhook
+    type: io.kestra.plugin.core.flow.If
+    condition:
+    then:
+      - id: notify
+        type: io.kestra.plugin.notifications.slack.SlackIncomingWebhook
+        url: "{{ secret('SLACK_WEBHOOK_URL') }}"
+        payload: '{"text": "Flow {{ flow.id }} finished with status {{ flow.state }}!"}'
+    else:
+      - id: secret_missing_log
+        type: io.kestra.plugin.core.log.Log
+        message: 'SLACK_WEBHOOK_URL secret is not defined'
 
 pluginDefaults:
   - type: io.kestra.plugin.gcp

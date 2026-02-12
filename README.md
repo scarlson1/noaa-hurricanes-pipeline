@@ -84,6 +84,24 @@ services:
 docker compose up -d
 ```
 
+**Upload Flows**
+
+Flows can be created and edited from the dashboard or uploaded from an existing file:
+
+```bash
+# CLI:
+kestra flow create /path/to/flow.yml
+# API:
+curl -X POST http://localhost:8080/api/v1/flows/import -F fileUpload=@flow.yaml
+# with basic auth:
+curl -X POST "http://localhost:8080/api/v1/flows" \
+     -u "admin@kestra.io:kestra" \
+     -H "Content-Type: application/yaml" \
+     --data-binary "@my-flow.yaml"
+```
+
+(Open Source Kestra API Docs)[https://kestra.io/docs/api-reference/open-source]
+
 **Clean up**
 
 ```bash
@@ -111,7 +129,10 @@ https://raw.githubusercontent.com/kestra-io/kestra/develop/docker-compose.yml
 - Update authentication details for access the dashboard (email/password)
 - Add base64 encoded credentials to .env_encoded and update reference in yaml
 - Edit file to connect to GCS for kestra files (instead of local file system) (& restart docker, if necessary)
-- In OCI dashboard, update firewall rules to enable access to VM on port 8080 and 8081 (monitoring)
+- In OCI dashboard, update firewall rules to enable access to VM on port 8080 and 8081 (monitoring) & update firewall in vm
+
+IP: 147.224.210.83
+PORT: 8080
 
 TODO: deploy flows from Github workflow
 

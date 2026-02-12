@@ -3,6 +3,23 @@ namespace: hurricanes
 description: |
   Import data into cochroach db
 
+# https://kestra.io/docs/best-practices/flows#flow-trigger-on-state-change
+triggers:
+  - id: upstream_dependency
+    type: io.kestra.plugin.core.trigger.Flow
+    preconditions:
+      id: flow_trigger
+      flows:
+        - namespace: hurricanes
+          flowId: 03_gcp_paths
+          states: [SUCCESS]
+    # conditions:
+    #   - type: io.kestra.plugin.core.condition.ExecutionStatusCondition
+    #     states: [SUCCESS]
+    # inputs:
+    #   flowId: 03_gcp_paths
+    #   namespace: hurricanes
+
 inputs:
   - id: year
     type: SELECT
@@ -246,10 +263,18 @@ tasks:
     disabled: false
 
 finally:
-  - id: notify
-    type: io.kestra.plugin.notifications.slack.SlackIncomingWebhook
-    url: "{{ secret('SLACK_WEBHOOK_URL') }}"
-    payload: '{"text": "Flow {{ flow.id }} finished with status {{ flow.state }}!"}'
+  - id: notify_if_slack_webhook
+    type: io.kestra.plugin.core.flow.If
+    condition:
+    then:
+      - id: notify
+        type: io.kestra.plugin.notifications.slack.SlackIncomingWebhook
+        url: "{{ secret('SLACK_WEBHOOK_URL') }}"
+        payload: '{"text": "Flow {{ flow.id }} finished with status {{ flow.state }}!"}'
+    else:
+      - id: secret_missing_log
+        type: io.kestra.plugin.core.log.Log
+        message: 'SLACK_WEBHOOK_URL secret is not defined'
 
 pluginDefaults:
   - type: io.kestra.plugin.gcp
