@@ -9,6 +9,8 @@ description: |
 triggers:
   - id: upstream_dependency
     type: io.kestra.plugin.core.trigger.Flow
+    inputs:
+      year: '{{ trigger.inputs.year }}'
     preconditions:
       id: flow_trigger
       flows:
@@ -196,7 +198,7 @@ tasks:
 
   - id: notify_download_complete_added_count
     type: io.kestra.plugin.core.log.Log
-    message: 'Added {{ outputs.count_post_merge.value - outputs.count_pre_merge.value }} new rows'
+    message: 'Added {{ (outputs.count_post_merge.value | default(0) | int) - (outputs.count_pre_merge.value | default(0) | int) }} new rows'
 
   # - id: load_into_cockroach
   #   type: io.kestra.plugin.jdbc.postgresql.Batch

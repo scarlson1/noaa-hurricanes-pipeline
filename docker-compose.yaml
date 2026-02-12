@@ -57,7 +57,7 @@ services:
     command: server standalone
     volumes:
       - kestra_data:/app/storage
-      - /Users/spencercarlson/.postgresql:/app/certs
+      - /Users/spencercarlson/.postgresql:/app/certs:ro
       - /var/run/docker.sock:/var/run/docker.sock
       - /tmp/kestra-wd:/tmp/kestra-wd
     environment:

@@ -119,7 +119,9 @@ docker system prune -v # and volumes
 Deployed to an Oracle compute instance (GCP free tier insufficient for JVM). (Kestra docs for Google)[https://kestra.io/docs/installation/gcp-vm#create-a-vm-instance]
 
 - Connect using SSH to install docker/docker compose.
-- Create the default kestra docker-compose boilerplate from kestra
+- Configure `docker-compose.yaml`:
+  - Option 1: copy from `docker-compose-oracle.yaml`
+  - Option2: create the default kestra docker-compose boilerplate from kestra
 
 ```bash
 curl -o docker-compose.yml \
@@ -132,6 +134,248 @@ https://raw.githubusercontent.com/kestra-io/kestra/develop/docker-compose.yml
 - Edit file to connect to GCS for kestra files (instead of local file system) (& restart docker, if necessary)
 - In OCI dashboard, update firewall rules to enable access to VM on port 8080 and 8081 (monitoring) & update firewall in vm
 
+### Secrets
+
+Copy service account into /app/service-account.json
+
+Secrets must be prepended with `SECRET_`
+
+**Manual option:**
+
+- create .env_encoded
+- copy over base64 encoded secrets
+
+**Script:**
+
+```bash
+#!/bin/bash
+set -e
+
+# Paths
+ENV_FILE=/home/opc/app/.env_encoded
+GCLOUD=/home/opc/google-cloud-sdk/bin/gcloud
+PROJECT=historical-paths
+
+# Ensure clean env file
+rm -f "$ENV_FILE"
+
+# Fetch GCP service account key and encode
+SERVICE_ACCOUNT_B64=$($GCLOUD secrets versions access latest \
+  --secret=NOAA_SERVICE_ACCOUNT --project=$PROJECT | base64 -w 0)
+echo "SECRET_GCP_SERVICE_ACCOUNT=$SERVICE_ACCOUNT_B64" >> "$ENV_FILE"
+
+# Fetch CockroachDB password and encode
+COCKROACH_PASSWORD_B64=$($GCLOUD secrets versions access latest \
+  --secret=DB_PASSWORD --project=$PROJECT | base64 -w 0)
+echo "SECRET_COCKROACH_PASSWORD=$COCKROACH_PASSWORD_B64" >> "$ENV_FILE"
+
+# Optional: other secrets
+# OTHER_SECRET_B64=$($GCLOUD secrets versions access latest --secret=other-secret --project=$PROJECT | base64 -w 0)
+# echo "KESTRA_OTHER_SECRET_B64=$OTHER_SECRET_B64" >> "$ENV_FILE"
+
+# Secure the file
+chmod 600 "$ENV_FILE"
+chown opc:opc "$ENV_FILE"
+
+echo ".env_encoded file generated at $ENV_FILE"
+
+```
+
+Can also be added to `start.sh` script as well
+
+### Cockroach DB CA
+
+Install gcloud CLI on VM
+
+```bash
+curl https://sdk.cloud.google.com | bash
+exec -l $SHELL
+gcloud init
+```
+
+Set permissions for SA:
+
+```bash
+chmod 600 /home/opc/app/service-account.json
+```
+
+Activate gcloud with service account:
+
+```bash
+gcloud config set project historical-paths
+gcloud auth activate-service-account \
+  --key-file=/home/opc/app/service-account.json
+```
+
+### Fetch secret & save to file
+
+### Option 1: manually fetch with CLI & run
+
+```bash
+gcloud secrets versions access latest \
+  --secret=COCKROACH_CA > /app/certs/root.crt
+```
+
+Ensure directory is mounted as volume to kestra container (`docker-compose.yaml`)
+
+```yaml
+volumes:
+  - ./certs:/app/certs:ro
+```
+
+```bash
+docker compose up -d
+```
+
+### Option 2: run as start up script
+
+create: `/opt/kestra/start.sh` (systemd scripts won't run in user directory):
+
+```bash
+#!/bin/bash
+set -e
+
+GCLOUD=/home/opc/google-cloud-sdk/bin/gcloud
+DOCKER=/usr/bin/docker
+KEYFILE=/home/opc/app/service-account.json
+PROJECT_ID=historical-paths
+CERTFILE=/home/opc/app/certs/root.crt
+
+echo "setting gcloud project"
+$GCLOUD config set project $PROJECT_ID
+sudo -u opc $GCLOUD config set project $PROJECT_ID
+
+echo "Authenticating to GCP..."
+$GCLOUD auth activate-service-account \
+  --key-file=$KEYFILE
+
+echo "Fetching Cockroach CA..."
+rm -f $CERTFILE
+$GCLOUD secrets versions access latest \
+  --secret=COCKROACH_CA > $CERTFILE
+
+chmod 600 $CERTFILE
+# chown root:root /home/opc/app/certs/root.crt
+
+# OPTIONALLY ADD ENV VARS FROM GCLOUD
+ENV_FILE=/home/opc/app/.env_encoded
+
+# Fetch CockroachDB password and encode
+COCKROACH_PASSWORD_B64=$($GCLOUD secrets versions access latest \
+  --secret=DB_PASSWORD --project=$PROJECT | base64 -w 0)
+echo "SECRET_COCKROACH_PASSWORD=$COCKROACH_PASSWORD_B64" >> "$ENV_FILE"
+
+SLACK_URL_B64=$($GCLOUD secrets versions access latest \
+  --secret=SLACK_WEBHOOK_URL --project=$PROJECT | base64 -w 0)
+echo "SECRET_SLACK_WEBHOOK_URL=$SLACK_URL_B64" >> "$ENV_FILE"
+
+# used in docker-compose.yaml (not as kestra secret)
+GEMINI_KEY=$($GCLOUD secrets versions access latest \
+  --secret=GEMINI_KEY --project=$PROJECT)
+export "GEMINI_KEY=$GEMINI_KEY"
+
+# Secure the file
+chmod 600 "$ENV_FILE"
+chown opc:opc "$ENV_FILE"
+
+echo ".env_encoded file generated at $ENV_FILE"
+
+echo "Starting Docker Compose..."
+cd /home/opc/app
+$DOCKER compose up -d
+
+echo "Startup complete."
+```
+
+Make it executable
+
+```bash
+chmod +x /opt/kestra/start.sh
+sudo chmod 755 /opt/kestra/start.sh
+# if SELinux context enforcing:
+sudo chcon -t bin_t /opt/kestra/start.sh
+```
+
+**Create systemd Service**
+
+systemd service to start automatically on boot:
+
+create `/etc/systemd/system/kestra.service`
+
+Put this inside:
+
+```ini
+[Unit]
+Description=Kestra Startup Service
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=opc
+ExecStart=/opt/kestra/start.sh
+RemainAfterExit=true
+Environment="HOME=/home/opc"
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Tell SELinux that it is an executable script:
+
+```bash
+sudo chcon -t bin_t /opt/kestra/start.sh
+sudo chown root:root /opt/kestra/start.sh
+sudo chmod 755 /opt/kestra/start.sh
+# chcon is temporary; after a relabel or restorecon, it may revert. For permanent fix:
+sudo semanage fcontext -a -t bin_t "/opt/kestra/start.sh"
+sudo restorecon -v /opt/kestra/start.sh
+
+# ensure key is readable by otc
+chmod 600 /home/opc/app/service-account.json
+chown opc:opc /home/opc/app/service-account.json
+
+# deal with SELinux type
+sudo semanage fcontext -a -t bin_t "/home/opc/app/service-account.json"
+sudo restorecon -v /home/opc/app/service-account.json
+```
+
+**Enable it**
+
+Reload systemd:
+
+```bash
+sudo systemctl daemon-reload
+```
+
+Enable service:
+
+```bash
+sudo systemctl enable kestra.service
+# Created symlink /etc/systemd/system/multi-user.target.wants/kestra.service → /etc/systemd/system/kestra.service.
+```
+
+start it (without reboot):
+
+```bash
+sudo systemctl start kestra.service
+```
+
+check logs:
+
+```bash
+sudo journalctl -u kestra.service -f
+sudo systemctl status kestra.service
+```
+
+Ensure docker automatically starts on reboot:
+
+```bash
+sudo systemctl enable docker.service
+```
+
+**Connect to UI:**
+
 IP: 147.224.210.83
 PORT: 8080
 
@@ -141,7 +385,7 @@ TODO: deploy flows from Github workflow
 
 - run on a schedule (kestra cron)
 - set up Subflows or Flow Triggers to run all flows
-- deploy from Github workflow
+- deploy Kestra flows from Github workflow
 - monitoring / notifications
 - update best track data if necessary (currently only adding rows if they don't exist (composite key))
   - don't add "provisional" data??

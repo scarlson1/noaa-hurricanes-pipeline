@@ -23,13 +23,14 @@ services:
     env_file: .env_encoded
     image: kestra/kestra:latest
     pull_policy: always
+    restart: always
     # Kestra, by default, has a termination grace period of 5m. more to be sure no active tasks are running.
     # stop_grace_period: 6m
     user: 'root'
     command: server standalone
     volumes:
       - kestra-data:/app/storage
-      - /app/certs:/app/certs
+      - ./certs:/app/certs:ro,z
       - /var/run/docker.sock:/var/run/docker.sock
       - /tmp/kestra-wd:/tmp/kestra-wd
       # Mount service account JSON so GCS storage can use GOOGLE_APPLICATION_CREDENTIALS
@@ -59,6 +60,11 @@ services:
               project-id: historical-paths
           queue:
             type: postgres
+          ai:
+            type: gemini
+            gemini:
+              model-name: gemini-3-flash 
+              api-key: ${GEMINI_KEY}
           tasks:
             tmp-dir:
               path: /tmp/kestra-wd/tmp
