@@ -128,6 +128,7 @@ https://raw.githubusercontent.com/kestra-io/kestra/develop/docker-compose.yml
 
 - Update authentication details for access the dashboard (email/password)
 - Add base64 encoded credentials to .env_encoded and update reference in yaml
+- add cockroach certs & map directory to container
 - Edit file to connect to GCS for kestra files (instead of local file system) (& restart docker, if necessary)
 - In OCI dashboard, update firewall rules to enable access to VM on port 8080 and 8081 (monitoring) & update firewall in vm
 

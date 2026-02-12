@@ -3,6 +3,8 @@ namespace: hurricanes
 description: |
   Import data into cochroach db
 
+# TODO: need to default to current year if triggered by other flow
+
 # https://kestra.io/docs/best-practices/flows#flow-trigger-on-state-change
 triggers:
   - id: upstream_dependency
@@ -25,7 +27,7 @@ inputs:
     type: SELECT
     displayName: Select year
     values: [2023, 2024, 2025, 2026, 2027, 2028, 2029, 2030]
-    defaults: 2025
+    defaults: "{{ now() | date('yyyy') }}"
     allowCustomValue: true
 
   - id: min_category

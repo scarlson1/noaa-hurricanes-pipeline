@@ -3,47 +3,6 @@ namespace: hurricanes
 description: |
   Import last 3 years of CSV Data from NOAA: https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/
 
-inputs:
-  - id: dataset
-    type: SELECT
-    displayName: Select NOAA dataset
-    values: ['last3years', 'NA', 'WP', 'ACTIVE']
-    defaults: 'last3years'
-
-  - id: year
-    type: SELECT
-    displayName: Select year
-    values: [2024, 2025, 2026, 2027, 2028]
-    defaults: 2025
-    allowCustomValue: true
-
-  - id: basin
-    type: SELECT
-    displayName: Select Basin
-    values: ['NA', 'EP']
-    defaults: 'NA'
-
-  - id: target_table
-    type: STRING
-    displayName: BigQuery Table
-    defaults: 'hurricanes'
-
-  - id: delete_temp_bq_table
-    type: BOOL
-    displayName: Delete intermediate BigQuery Table
-    default: true
-
-variables:
-  file: 'ibtracs.{{inputs.dataset}}.list.v04r01.csv'
-  # gcs_file: "gs://{{kv('GCP_BUCKET_NAME')}}/{{var.file}}"
-  gcs_file: "gs://{{kv('GCP_BUCKET_NAME')}}/{{inputs.dataset}}.csv"
-  int_table_name: 'hurricanes_{{inputs.dataset}}'
-  table: "{{ kv('GCP_DATASET') }}.{{vars.int_table_name}}"
-  data: "{{ outputs.download_csv.outputFiles['ibtracs.' ~ inputs.dataset ~ '.list.v04r01.csv']}}"
-  # data: "{{outputs.extract.outputFiles['ibtracs.' ~ inputs.dataset ~ '.list.v04r01.csv']}}"
-  # data: "{{outputs.extract.outputFiles[inputs.dataset ~ '_paths_' ~ inputs.year ~ '-' ~ inputs.basin ~ '.csv']}}"
-  # ibtracs.last3years.list.v04r01.csv
-
 # https://kestra.io/docs/workflow-components/triggers/schedule-trigger
 triggers:
   - id: schedule
@@ -51,6 +10,51 @@ triggers:
     cron: '@monthly'
     timezone: America/Chicago
     recoverMissedSchedules: NONE
+
+inputs:
+  - id: dataset
+    type: SELECT
+    displayName: Select NOAA dataset
+    description: NOAA dataset to use as the source
+    values: ['last3years', 'NA', 'WP', 'ACTIVE']
+    defaults: 'last3years'
+
+  - id: year
+    type: SELECT
+    displayName: Select year
+    description: Filter data to event in specific year
+    values: [2024, 2025, 2026, 2027, 2028]
+    defaults: 2025
+    allowCustomValue: true
+
+  - id: basin
+    type: SELECT
+    displayName: Select Basin
+    description: Filter data by basin
+    values: ['NA', 'EP']
+    defaults: 'NA'
+
+  - id: target_table
+    type: STRING
+    displayName: BigQuery Table
+    description: Import data into materialized BigQuery table
+    defaults: 'hurricanes'
+
+  - id: delete_temp_bq_table
+    type: BOOL
+    displayName: Delete intermediate BigQuery Table
+    defaults: true
+
+variables:
+  file: 'ibtracs.{{ inputs.dataset }}.list.v04r01.csv'
+  # gcs_file: "gs://{{kv('GCP_BUCKET_NAME')}}/{{var.file}}"
+  gcs_file: "gs://{{kv('GCP_BUCKET_NAME')}}/{{inputs.dataset}}.csv"
+  int_table_name: 'hurricanes_{{ inputs.dataset }}'
+  table: "{{ kv('GCP_DATASET') }}.{{ vars.int_table_name }}"
+  data: "{{ outputs.download_csv.outputFiles['ibtracs.' ~ inputs.dataset ~ '.list.v04r01.csv']}}"
+  # data: "{{outputs.extract.outputFiles['ibtracs.' ~ inputs.dataset ~ '.list.v04r01.csv']}}"
+  # data: "{{outputs.extract.outputFiles[inputs.dataset ~ '_paths_' ~ inputs.year ~ '-' ~ inputs.basin ~ '.csv']}}"
+  # ibtracs.last3years.list.v04r01.csv
 
 tasks:
   - id: set_label
@@ -216,14 +220,14 @@ tasks:
           S.timestamp
         );
 
-  - id: if_yellow_taxi
+  - id: if_delete_bq_materialized
     type: io.kestra.plugin.core.flow.If
     condition: '{{ inputs.delete_temp_bq_table }}'
     then:
       - id: delete_table
         type: io.kestra.plugin.gcp.bigquery.DeleteTable
         dataset: "{{ kv('GCP_DATASET') }}"
-        table: '{{ vars.int_table_name }}'
+        table: '{{ render(vars.int_table_name) }}'
 
   - id: purge_files
     type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
