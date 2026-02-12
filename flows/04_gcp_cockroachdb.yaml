@@ -17,12 +17,6 @@ triggers:
         - namespace: hurricanes
           flowId: 03_gcp_paths
           states: [SUCCESS]
-    # conditions:
-    #   - type: io.kestra.plugin.core.condition.ExecutionStatusCondition
-    #     states: [SUCCESS]
-    # inputs:
-    #   flowId: 03_gcp_paths
-    #   namespace: hurricanes
 
 inputs:
   - id: year
@@ -142,7 +136,9 @@ tasks:
     username: '{{ render(vars.db_user) }}'
     password: "{{ secret('COCKROACH_PASSWORD') }}"
     sql: |
-      SELECT COUNT(*) FROM {{ render(vars.target_table) }};
+      SELECT COUNT(*) AS count FROM {{ render(vars.target_table) }};
+    fetchType: FETCH_ONE
+    fetchSize: 1
 
   - id: upsert_to_destination
     type: io.kestra.plugin.jdbc.postgresql.Query
@@ -186,7 +182,9 @@ tasks:
     username: '{{ render(vars.db_user) }}'
     password: "{{ secret('COCKROACH_PASSWORD') }}"
     sql: |
-      SELECT COUNT(*) FROM {{ render(vars.target_table) }};
+      SELECT COUNT(*) AS count FROM {{ render(vars.target_table) }};
+    fetchType: FETCH_ONE
+    fetchSize: 1
 
   - id: truncate_stage
     type: io.kestra.plugin.jdbc.postgresql.Query
@@ -196,9 +194,13 @@ tasks:
     sql: |
       TRUNCATE TABLE {{ render(vars.crdb_stage_table )}};
 
-  - id: notify_download_complete_added_count
+  - id: log_row_totals
     type: io.kestra.plugin.core.log.Log
-    message: 'Added {{ (outputs.count_post_merge.value | default(0) | int) - (outputs.count_pre_merge.value | default(0) | int) }} new rows'
+    message: 'Row count Before: {{ outputs.count_pre_merge["row"]["count"] }}; After: {{ outputs.count_post_merge["row"]["count"] }}'
+
+  # - id: notify_download_complete_added_count
+  #   type: io.kestra.plugin.core.log.Log
+  #   message: 'Added {{ (outputs.count_post_merge.value | default(0) | int) - (outputs.count_pre_merge.value | default(0) | int) }} new rows'
 
   # - id: load_into_cockroach
   #   type: io.kestra.plugin.jdbc.postgresql.Batch
@@ -269,12 +271,12 @@ tasks:
 finally:
   - id: notify_if_slack_webhook
     type: io.kestra.plugin.core.flow.If
-    condition:
+    condition: "{{ secret('SLACK_WEBHOOK_URL') }}"
     then:
       - id: notify
         type: io.kestra.plugin.notifications.slack.SlackIncomingWebhook
         url: "{{ secret('SLACK_WEBHOOK_URL') }}"
-        payload: '{"text": "Flow {{ flow.id }} finished with status {{ flow.state }}!"}'
+        payload: '{"text": "Flow {{ flow.id }} finished with status {{ execution.state }}!"}'
     else:
       - id: secret_missing_log
         type: io.kestra.plugin.core.log.Log

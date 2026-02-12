@@ -21,7 +21,7 @@ services:
 
   kestra:
     env_file: .env_encoded
-    image: kestra/kestra:latest
+    image: kestra/kestra:v1.2
     pull_policy: always
     restart: always
     # Kestra, by default, has a termination grace period of 5m. more to be sure no active tasks are running.
@@ -63,7 +63,7 @@ services:
           ai:
             type: gemini
             gemini:
-              model-name: gemini-3-flash 
+              model-name: gemini-2.5-flash 
               api-key: ${GEMINI_KEY}
           tasks:
             tmp-dir:

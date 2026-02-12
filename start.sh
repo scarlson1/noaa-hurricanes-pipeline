@@ -46,7 +46,7 @@ echo "SECRET_SLACK_WEBHOOK_URL=$SLACK_URL_B64" >> "$ENV_FILE"
 # used in docker-compose.yaml (not as kestra secret)
 GEMINI_KEY_B64=$($GCLOUD secrets versions access latest \
   --secret=GEMINI_KEY --project=$PROJECT_ID | base64 -w 0)
-export "GEMINI_KEY=$GEMINI_KEY_B64" >> "$ENV_FILE"
+echo "GEMINI_KEY=$GEMINI_KEY_B64" >> "$ENV_FILE"
 
 # Secure the file
 chmod 600 "$ENV_FILE"

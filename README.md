@@ -136,14 +136,19 @@ https://raw.githubusercontent.com/kestra-io/kestra/develop/docker-compose.yml
 
 ### Secrets
 
-Copy service account into /app/service-account.json
+Copy service account into /app/service-account.json (for gcloud cli auth)
 
-Secrets must be prepended with `SECRET_`
+The following secrets are stored in GCP Secret Manager:
+
+- `NOAA_SERVICE_ACCOUNT` - service account with BigQuery, GCS, Storage permissions
+- `DB_PASSWORD` - Cockroach DB password
+- `SLACK_WEBHOOK_URL` - slack url for notifications
 
 **Manual option:**
 
 - create .env_encoded
 - copy over base64 encoded secrets
+- secrets must be prepended with `SECRET_`
 
 **Script:**
 
@@ -262,17 +267,17 @@ ENV_FILE=/home/opc/app/.env_encoded
 
 # Fetch CockroachDB password and encode
 COCKROACH_PASSWORD_B64=$($GCLOUD secrets versions access latest \
-  --secret=DB_PASSWORD --project=$PROJECT | base64 -w 0)
+  --secret=DB_PASSWORD --project=$PROJECT_ID | base64 -w 0)
 echo "SECRET_COCKROACH_PASSWORD=$COCKROACH_PASSWORD_B64" >> "$ENV_FILE"
 
 SLACK_URL_B64=$($GCLOUD secrets versions access latest \
-  --secret=SLACK_WEBHOOK_URL --project=$PROJECT | base64 -w 0)
+  --secret=SLACK_WEBHOOK_URL --project=$PROJECT_ID | base64 -w 0)
 echo "SECRET_SLACK_WEBHOOK_URL=$SLACK_URL_B64" >> "$ENV_FILE"
 
 # used in docker-compose.yaml (not as kestra secret)
-GEMINI_KEY=$($GCLOUD secrets versions access latest \
-  --secret=GEMINI_KEY --project=$PROJECT)
-export "GEMINI_KEY=$GEMINI_KEY"
+GEMINI_KEY_B64=$($GCLOUD secrets versions access latest \
+  --secret=GEMINI_KEY --project=$PROJECT_ID | base64 -w 0)
+echo "GEMINI_KEY=$GEMINI_KEY_B64" >> "$ENV_FILE"
 
 # Secure the file
 chmod 600 "$ENV_FILE"
@@ -383,8 +388,7 @@ TODO: deploy flows from Github workflow
 
 ### TODOs
 
-- run on a schedule (kestra cron)
-- set up Subflows or Flow Triggers to run all flows
+- update schedule (kestra cron) to filter down to month instead of year (filter on iso_time instead of year)
 - deploy Kestra flows from Github workflow
 - monitoring / notifications
 - update best track data if necessary (currently only adding rows if they don't exist (composite key))

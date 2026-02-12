@@ -10,6 +10,10 @@ triggers:
     cron: '@monthly'
     timezone: America/Chicago
     recoverMissedSchedules: NONE
+    inputs:
+      dataset: 'last3years'
+      year: "{{ now() | date('yyyy') }}"
+      basin: ['NA', 'EP']
 
 inputs:
   - id: dataset
@@ -24,15 +28,15 @@ inputs:
     displayName: Select year
     description: Filter data to event in specific year
     values: [2024, 2025, 2026, 2027, 2028]
-    defaults: 2025
+    defaults: "{{ now() | date('yyyy') }}"
     allowCustomValue: true
 
   - id: basin
-    type: SELECT
     displayName: Select Basin
     description: Filter data by basin
+    type: MULTISELECT
     values: ['NA', 'EP']
-    defaults: 'NA'
+    defaults: ['NA', 'EP']
 
   - id: target_table
     type: STRING
@@ -152,6 +156,9 @@ tasks:
         ignore_unknown_values = TRUE
       );
 
+  - id: debug
+    type: io.kestra.plugin.core.log.Log
+    message: '{{ inputs.basin }}'
   # TODO: filter down to storms that have min category of at least 1
   # copy data from csv to external bigquery table
   - id: bq_table_tmp
@@ -178,7 +185,7 @@ tasks:
       FROM `{{ kv('GCP_PROJECT_ID') }}.{{ render(vars.table) }}_ext`
       WHERE 
         season = '{{ inputs.year }}' 
-        AND basin LIKE '{{inputs.basin}}'
+        AND basin IN UNNEST({{ inputs.basin }})
         AND lat IS NOT NULL
         AND lon IS NOT NULL;
   # ORDER BY iso_time ASC
@@ -237,12 +244,12 @@ tasks:
 finally:
   - id: notify_if_slack_webhook
     type: io.kestra.plugin.core.flow.If
-    condition:
+    condition: "{{ secret('SLACK_WEBHOOK_URL') }}"
     then:
       - id: notify
         type: io.kestra.plugin.notifications.slack.SlackIncomingWebhook
         url: "{{ secret('SLACK_WEBHOOK_URL') }}"
-        payload: '{"text": "Flow {{ flow.id }} finished with status {{ flow.state }}!"}'
+        payload: '{"text": "Flow {{ flow.id }} finished with status {{ execution.state }}!"}'
     else:
       - id: secret_missing_log
         type: io.kestra.plugin.core.log.Log
