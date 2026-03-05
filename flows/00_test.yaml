@@ -1,0 +1,7 @@
+id: 01_gcp_kv
+namespace: hurricanes
+
+tasks:
+  - id: log_message
+    type: io.kestra.plugin.core.log.Log
+    message: 'Hello world (test deployment from github workflow)'
