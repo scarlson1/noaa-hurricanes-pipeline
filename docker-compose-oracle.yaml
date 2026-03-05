@@ -34,7 +34,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - /tmp/kestra-wd:/tmp/kestra-wd
       # Mount service account JSON so GCS storage can use GOOGLE_APPLICATION_CREDENTIALS
-      # (storage backend expects raw JSON, not base64-encoded secret)
+      # (storage backend expects JSON, not base64-encoded secret)
       - ./kestra-sa.json:/.gcp/credentials.json
     environment:
       GOOGLE_APPLICATION_CREDENTIALS: /.gcp/credentials.json
