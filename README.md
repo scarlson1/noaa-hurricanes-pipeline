@@ -63,7 +63,7 @@ Run the following command to encode the Google Cloud service account key. (Kestr
 echo SECRET_GCP_SERVICE_ACCOUNT=$(cat service-account.json | base64 -w 0) >> .env_encoded
 ```
 
-Run the following command to encode string secrets (Gemini key, Cochroach password). Add to .env_encoded.
+Run the following command to encode string secrets (Gemini key, Cochroach password). Add to .env*encoded (prefix `SECRET*`).
 
 ```bash
 echo -n "actual_env_var" | base64
