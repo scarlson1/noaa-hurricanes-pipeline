@@ -388,6 +388,10 @@ PORT: 8080
 
 ### TODOs
 
+- Terraform / github refactor:
+  - add kestra/ start script and ensure its working, then:
+    - remove app/ and systemd start script
+
 - update schedule (kestra cron) to filter down to month instead of year (filter on iso_time instead of year)
 - ~deploy Kestra flows from Github workflow~
 - monitoring / notifications

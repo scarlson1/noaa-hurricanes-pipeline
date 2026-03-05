@@ -1,4 +1,4 @@
-id: 01_gcp_kv
+id: 00_test
 namespace: hurricanes
 
 tasks:
