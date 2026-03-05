@@ -50,7 +50,7 @@ services:
             basic-auth:
               enabled: true
               username: spencercarlson@mac.com
-              password: Kcarmel1006!
+              password: kestra123!
           repository:
             type: postgres
           storage:

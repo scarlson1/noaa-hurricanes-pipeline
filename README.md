@@ -16,7 +16,7 @@ Resource Links:
 
 ### [01_gcp_kv.yaml](./flows/01_gcp_kv.yaml)
 
-Load cloud variables (project ID, BigQuery dataset, etc)
+- Load cloud variables (project ID, BigQuery dataset, etc)
 
 ### [02_gcp_setup.yaml](./flows/02_gcp_setup.yaml)
 
@@ -26,14 +26,15 @@ Load cloud variables (project ID, BigQuery dataset, etc)
 ### [03_gcp_paths.yaml](./flows/03_gcp_paths.yaml)
 
 - Select NOAA dataset to download (basin) and year to filter
-- downloads CSV to GCS
-- creates BigQuery table if it doesn't exist
-- creates _EXTERNAL_ BigQuery table from GCS CSV
-- creates materialize BigQuery table
+- downloads CSV to GCS (from vars provided in step 1)
+- creates BigQuery table if it doesn't exist (var `target_table`)
+- creates _EXTERNAL_ BigQuery table from GCS CSV (`[NOAA_DATASET]_ext`)
+- creates materialize BigQuery table (`hurricanes_[NOAA_DATASET]`)
   - filters from input (basin, year)
-  - calculates unique row ID (hash of sid + timestamp)
+  - calculates unique composite row ID for idempotent inserts (hash of sid + timestamp)
 - merges table into BigQuery `target_table` if row doesn't already exist
-- optionally drop materialized BigQuery table
+- optionally drop materialized BigQuery table (`hurricanes_[NOAA_DATASET]`)
+- send status notification to Slack
 
 ### [04_gcp_cockreachdb.yaml](./flows/04_gcp_cockroachdb.yaml)
 
@@ -42,6 +43,7 @@ Load cloud variables (project ID, BigQuery dataset, etc)
 - creates staging table in CockroachDB & copies from CSV
 - inserts rows into destination table (if `unique_row_id` doesn't exist)
 - truncate staging table
+- send status notification to Slack
 
 ---
 
@@ -112,11 +114,11 @@ docker system prune -a
 docker system prune -v # and volumes
 ```
 
----
-
 ## Deployment
 
-Deployed to an Oracle compute instance (GCP free tier insufficient for JVM). (Kestra docs for Google)[https://kestra.io/docs/installation/gcp-vm#create-a-vm-instance]
+TODO: documentation on creating VM (and use terraform ??)
+
+Deployed to an Oracle compute instance (GCP free tier insufficient for JVM). [Kestra docs for GCP VM](https://kestra.io/docs/installation/gcp-vm#create-a-vm-instance)
 
 - Connect using SSH to install docker/docker compose.
 - Configure `docker-compose.yaml`:
@@ -384,12 +386,10 @@ sudo systemctl enable docker.service
 IP: 147.224.210.83
 PORT: 8080
 
-TODO: deploy flows from Github workflow
-
 ### TODOs
 
 - update schedule (kestra cron) to filter down to month instead of year (filter on iso_time instead of year)
-- deploy Kestra flows from Github workflow
+- ~deploy Kestra flows from Github workflow~
 - monitoring / notifications
 - update best track data if necessary (currently only adding rows if they don't exist (composite key))
   - don't add "provisional" data??
@@ -397,4 +397,137 @@ TODO: deploy flows from Github workflow
   - other relevant columns:
     - `TRACK_TYPE` (other values): `MAIN` (reanalyzed, higher quality) or spur (short-lived, often alternate positions).
     - `USA_RECORD`: Contains 'P' to indicate a provisional minimum in central pressure, or other codes for preliminary, real-time data
-- update hurricane website to display database last updated at
+
+## Troubleshooting
+
+useful terraform commands:
+
+```bash
+# List all VCNs with their names and OCIDs
+oci network vcn list --compartment-id <tenancy-ocid> --query 'data[].{"name":"display-name","ocid":"id"}' --output table
+
+# List all subnets
+oci network subnet list --compartment-id <tenancy-ocid> --query 'data[].{"name":"display-name","ocid":"id","vcn":"vcn-id"}' --output table
+
+# List all instances
+oci compute instance list --compartment-id <tenancy-ocid> --query 'data[].{"name":"display-name","ocid":"id","shape":"shape","state":"lifecycle-state"}' --output table
+```
+
+import existing resources:
+
+```bash
+# 1. OCI instance
+terraform import module.oci.oci_core_instance.kestra_vm <your-instance-ocid>
+
+# 2. OCI VCN (get OCID from OCI console or CLI)
+oci network vcn list --compartment-id <tenancy-ocid> --query 'data[0].id' --raw-output
+terraform import module.oci.oci_core_vcn.kestra_vcn <vcn-ocid>
+
+# 3. OCI subnet
+oci network subnet list --compartment-id <tenancy-ocid> --query 'data[0].id' --raw-output
+terraform import module.oci.oci_core_subnet.kestra_subnet <subnet-ocid>
+
+# 4. GCS bucket
+terraform import module.gcp.google_storage_bucket.kestra_bucket hurricanes_pipeline_kestra
+
+# 5. BigQuery dataset
+terraform import module.gcp.google_bigquery_dataset.kestra_dataset <gcp-project-id>/<dataset-id>
+```
+
+---
+
+## Claude recommended process:
+
+### Step 1 — Bootstrap the VM (one time)
+
+```bash
+ssh -i ~/.ssh/oracle-kestra opc@129.146.100.119 'bash -s' < bootstrap.sh
+```
+
+This installs Docker, creates the ~/kestra directory, and registers the systemd service.
+
+### Step 2 — Copy secrets and start Kestra (one time)
+
+```bash
+bashVM="opc@129.146.100.119"
+OPTS="-o StrictHostKeyChecking=no -i ~/.ssh/oracle-kestra"
+
+scp $OPTS docker-compose-oracle.yaml $VM:~/kestra/
+scp $OPTS service-account.json       $VM:~/kestra/
+scp $OPTS .env                        $VM:~/kestra/
+
+ssh $OPTS $VM "sudo systemctl start kestra"
+ssh $OPTS $VM "sudo journalctl -u kestra -f"  # watch logs
+```
+
+### Step 3 — Add GitHub secrets
+
+Go to your repo → Settings → Secrets → Actions and add:
+
+SecretValue
+OCI_VM_IP 129.146.100.119
+OCI_SSH_PRIVATE_KEY contents of ~/.ssh/oracle-kestra
+GCP_SERVICE_ACCOUNT_JSON contents of service-account.json
+KESTRA_USER spencercarlson@mac.com
+KESTRA_PASSWORD your Kestra password
+GEMINI_KEY from your .env
+COCKROACH_PASSWORD from your .env
+SLACK_WEBHOOK_URL from your .env
+
+### Step 4 — Add workflow files to repo
+
+Place both yml files in .github/workflows/ and push — from that point on, pushes to flows/ auto-deploy to Kestra, and pushes to docker-compose-oracle.yaml redeploy the service.
+
+One thing to fix in your compose file — the .env_encoded reference should become .env on the VM since the GitHub Action writes a plain .env. You can either update the compose file or keep both approaches with a note.
+
+---
+
+### After running `terraform apply`
+
+**1. Run the bootstrap script on the VM**
+
+```bash
+ssh -i ~/.ssh/oracle-kestra opc@129.146.100.119 'bash -s' < bootstrap.sh
+```
+
+This installs Docker, creates the ~/kestra directory, and registers the systemd service.
+
+**2. Get the new Terraform-generated SA key**
+
+```bash
+cd /Users/spencercarlson/Documents/dev/hurricanes_pipeline/terraform
+terraform output -raw kestra_sa_key | base64 -d > ../kestra-sa.json
+```
+
+**3. Update your compose file to use the new scoped SA** — change the volume mount and env var:
+
+```yaml
+volumes:
+  - ./kestra-sa.json:/.gcp/credentials.json
+```
+
+The filename changes from `service-account.json` to `kestra-sa.json`, everything else stays the same.
+
+**4. Copy files to the VM**
+
+```bash
+VM="opc@129.146.100.119"
+OPTS="-i ~/.ssh/oracle-kestra"
+
+scp $OPTS docker-compose-oracle.yaml    $VM:~/kestra/
+scp $OPTS kestra-sa.json                $VM:~/kestra/
+scp $OPTS .env                           $VM:~/kestra/
+```
+
+**5. Start Kestra**
+
+```bash
+ssh $OPTS $VM "sudo systemctl start kestra"
+
+# Watch logs to confirm it comes up
+ssh $OPTS $VM "sudo journalctl -u kestra -f"
+```
+
+You should see Postgres start first, then Kestra connect to it and begin listening on port 8080. Once you see something like `Kestra is ready` in the logs, hit `http://129.146.100.119:8080` in your browser.
+
+**6. Add GitHub secrets and push the workflow files** — once Kestra is confirmed running, set up the Actions secrets and drop the two workflow yml files into `.github/workflows/` so future deploys are automated.

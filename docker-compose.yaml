@@ -1,5 +1,5 @@
 volumes:
-  ny_taxi_postgres_data:
+  hurricane_postgres_data:
     driver: local
   kestra_postgres_data:
     driver: local
@@ -16,7 +16,7 @@ services:
     ports:
       - '5432:5432'
     volumes:
-      - ny_taxi_postgres_data:/var/lib/postgresql
+      - hurricane_postgres_data:/var/lib/postgresql
     depends_on:
       kestra:
         condition: service_started

@@ -12,3 +12,12 @@ wheels/
 *.json
 .env_encoded
 .env
+
+# Terraform
+terraform.tfvars
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+terraform.tfplan
+

@@ -81,16 +81,12 @@ tasks:
   #   type: io.kestra.plugin.core.http.Download
   #   uri: https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/ibtracs.{{inputs.dataset}}.list.v04r01.csv
   #   # saveAs: "{{render(vars.data)}}"
-  # - id: notify_download_complete
-  #   type: io.kestra.plugin.core.log.Log
-  #   message: "Downloaded file URI: {{ outputs.download_csv.uri }}"
   - id: upload_to_gcs
     type: io.kestra.plugin.gcp.gcs.Upload
     from: '{{ render(vars.data) }}'
     to: '{{ render(vars.gcs_file) }}'
     # from: "{{ outputs.download_csv.uri }}"
 
-  # filter to selected year & selected basin
   - id: bq_table_create
     type: io.kestra.plugin.gcp.bigquery.Query
     sql: |
@@ -110,7 +106,7 @@ tasks:
         timestamp STRING OPTIONS (description = 'Event data point timestamp')
       )
 
-  # cockroachDB calculated columns
+  # cockroachDB calculated columns:
   # point_id UUID NOT NULL DEFAULT gen_random_uuid(),
   # rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   # year INTEGER NULL AS (season),
@@ -156,10 +152,7 @@ tasks:
         ignore_unknown_values = TRUE
       );
 
-  - id: debug
-    type: io.kestra.plugin.core.log.Log
-    message: '{{ inputs.basin }}'
-  # TODO: filter down to storms that have min category of at least 1
+  # TODO: filter down to storms that have min category of at least 0
   # copy data from csv to external bigquery table
   - id: bq_table_tmp
     type: io.kestra.plugin.gcp.bigquery.Query
@@ -188,8 +181,6 @@ tasks:
         AND basin IN UNNEST({{ inputs.basin }})
         AND lat IS NOT NULL
         AND lon IS NOT NULL;
-  # ORDER BY iso_time ASC
-  # FORMAT_TIMESTAMP("%Y-%m-%dT%H:%M:%E*S%Ez", iso_time, "UTC")
 
   - id: bq_merge
     type: io.kestra.plugin.gcp.bigquery.Query

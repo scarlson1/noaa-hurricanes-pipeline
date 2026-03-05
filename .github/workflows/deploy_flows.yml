@@ -1,0 +1,24 @@
+name: Deploy Kestra Flows
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'flows/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy flows to Kestra
+        uses: kestra-io/deploy-action@master
+        with:
+          resource: flow
+          namespace: hurricanes
+          directory: ./flows
+          server: http://${{ secrets.OCI_VM_IP }}:8080
+          user: ${{ secrets.KESTRA_USER }}
+          password: ${{ secrets.KESTRA_PASSWORD }}
