@@ -12,20 +12,20 @@ services:
     environment:
       POSTGRES_DB: kestra
       POSTGRES_USER: kestra
-      POSTGRES_PASSWORD: k3str4
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}']
+      test: ['CMD-SHELL', 'pg_isready -d ${POSTGRES_DB} -U ${POSTGRES_USER}']
       interval: 30s
       timeout: 10s
       retries: 10
 
   kestra:
-    env_file: .env_encoded
+    env_file:
+      - .env
+      - .env_encoded
     image: kestra/kestra:v1.2
     pull_policy: always
     restart: always
-    # Kestra, by default, has a termination grace period of 5m. more to be sure no active tasks are running.
-    # stop_grace_period: 6m
     user: 'root'
     command: server standalone
     volumes:
@@ -35,7 +35,7 @@ services:
       - /tmp/kestra-wd:/tmp/kestra-wd
       # Mount service account JSON so GCS storage can use GOOGLE_APPLICATION_CREDENTIALS
       # (storage backend expects raw JSON, not base64-encoded secret)
-      - ./service-account.json:/.gcp/credentials.json
+      - ./kestra-sa.json:/.gcp/credentials.json
     environment:
       GOOGLE_APPLICATION_CREDENTIALS: /.gcp/credentials.json
       KESTRA_CONFIGURATION: |
@@ -44,13 +44,13 @@ services:
             url: jdbc:postgresql://postgres:5432/kestra
             driverClassName: org.postgresql.Driver
             username: kestra
-            password: k3str4
+            password: ${POSTGRES_PASSWORD}
         kestra:
           server:
             basic-auth:
               enabled: true
-              username: spencercarlson@mac.com
-              password: kestra123!
+              username: ${KESTRA_USER}
+              password: ${KESTRA_PASSWORD}
           repository:
             type: postgres
           storage:
@@ -63,7 +63,7 @@ services:
           ai:
             type: gemini
             gemini:
-              model-name: gemini-2.5-flash 
+              model-name: gemini-2.5-flash
               api-key: ${GEMINI_KEY}
           tasks:
             tmp-dir:
