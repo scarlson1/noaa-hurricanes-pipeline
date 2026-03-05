@@ -16,12 +16,22 @@ jobs:
       - name: Write service account JSON
         run: echo '${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}' > service-account.json
 
-      - name: Write .env file
+      - name: Generate .env (plain - for Docker Compose interpolation)
         run: |
           cat <<EOF > .env
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          KESTRA_USER=${{ secrets.KESTRA_USER }}
+          KESTRA_PASSWORD=${{ secrets.KESTRA_PASSWORD }}
           GEMINI_KEY=${{ secrets.GEMINI_KEY }}
-          COCKROACH_PASSWORD=${{ secrets.COCKROACH_PASSWORD }}
-          SLACK_WEBHOOK_URL=${{ secrets.SLACK_WEBHOOK_URL }}
+          EOF
+
+      - name: Generate .env_encoded (base64 - for Kestra secret store)
+        run: |
+          encode() { echo -n "$1" | base64 -w 0; }
+          cat <<EOF > .env_encoded
+          SECRET_GCP_SERVICE_ACCOUNT=$(encode '${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}')
+          SECRET_COCKROACH_PASSWORD=$(encode '${{ secrets.COCKROACH_PASSWORD }}')
+          SECRET_SLACK_WEBHOOK_URL=$(encode '${{ secrets.SLACK_WEBHOOK_URL }}')
           EOF
 
       - name: Write SSH key
