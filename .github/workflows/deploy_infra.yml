@@ -40,6 +40,20 @@ jobs:
           echo '${{ secrets.OCI_SSH_PRIVATE_KEY }}' > ~/.ssh/oracle-kestra
           chmod 600 ~/.ssh/oracle-kestra
 
+      - name: Write CockroachDB cert
+        run: echo '${{ secrets.COCKROACH_CA_CERT }}' | base64 -d > root.crt
+
+      # alternatively, load from GCP secret manager
+      # - name: Fetch CockroachDB cert from GCP Secret Manager
+      #   run: |
+      #     ssh $SSH_OPTS $VM "
+      #       echo '${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}' > /tmp/sa.json
+      #       gcloud auth activate-service-account --key-file=/tmp/sa.json
+      #       gcloud secrets versions access latest --secret=COCKROACH_CA > ~/kestra/certs/root.crt
+      #       chmod 600 ~/kestra/certs/root.crt
+      #       rm /tmp/sa.json
+      #     "
+
       - name: Copy files to VM
         run: |
           SSH_OPTS="-o StrictHostKeyChecking=no -i ~/.ssh/oracle-kestra"
@@ -48,9 +62,10 @@ jobs:
 
           ssh $SSH_OPTS $VM "mkdir -p ~/kestra/certs"
 
-          scp $SCP_OPTS docker-compose-oracle.yaml $VM:~/kestra/docker-compose-oracle.yaml
+          scp $SCP_OPTS docker-compose-oracle.yaml $VM:~/kestra/compose.yaml
           scp $SCP_OPTS service-account.json       $VM:~/kestra/service-account.json
-          scp $SCP_OPTS .env                        $VM:~/kestra/.env
+          scp $SCP_OPTS root.crt                   $VM:~/kestra/certs/root.crt
+          scp $SCP_OPTS .env                       $VM:~/kestra/.env
           scp $SCP_OPTS .env_encoded               $VM:~/kestra/.env_encoded
 
       - name: Restart Kestra
