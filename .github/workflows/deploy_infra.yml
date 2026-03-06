@@ -51,6 +51,7 @@ jobs:
           scp $SCP_OPTS docker-compose-oracle.yaml $VM:~/kestra/docker-compose-oracle.yaml
           scp $SCP_OPTS service-account.json       $VM:~/kestra/service-account.json
           scp $SCP_OPTS .env                        $VM:~/kestra/.env
+          scp $SCP_OPTS .env_encoded               $VM:~/kestra/.env_encoded
 
       - name: Restart Kestra
         run: |
