@@ -11,12 +11,24 @@ triggers:
     type: io.kestra.plugin.core.trigger.Flow
     inputs:
       year: '{{ trigger.inputs.year }}'
-    preconditions:
-      id: flow_trigger
-      flows:
-        - namespace: hurricanes
-          flowId: 03_gcp_paths
-          states: [SUCCESS]
+    conditions:
+      - type: io.kestra.plugin.core.condition.ExecutionFlowCondition
+        namespace: hurricanes
+        flowId: 03_gcp_paths
+      - type: io.kestra.plugin.core.condition.ExecutionStatusCondition
+        in:
+          - SUCCESS
+# triggers:
+#   - id: upstream_dependency
+#     type: io.kestra.plugin.core.trigger.Flow
+#     inputs:
+#       year: '{{ trigger.inputs.year }}'
+#     preconditions:
+#       id: flow_trigger
+#       flows:
+#         - namespace: hurricanes
+#           flowId: 03_gcp_paths
+#           states: [SUCCESS]
 
 inputs:
   - id: year

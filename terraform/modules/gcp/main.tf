@@ -17,9 +17,16 @@ resource "google_storage_bucket" "kestra_bucket" {
   }
 }
 
-# IAM: SA can read/write GCS
+# IAM: SA can read/write GCS (Kestra internal bucket)
 resource "google_storage_bucket_iam_member" "kestra_gcs" {
   bucket = google_storage_bucket.kestra_bucket.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.kestra.email}"
+}
+
+# IAM: SA can read/write hurricane data bucket
+resource "google_storage_bucket_iam_member" "kestra_hurricane_data_gcs" {
+  bucket = "hurricane_data_noaa"
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${google_service_account.kestra.email}"
 }
