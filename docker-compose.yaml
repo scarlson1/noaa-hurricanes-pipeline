@@ -12,7 +12,7 @@ services:
     environment:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: root
-      POSTGRES_DB: ny_taxi
+      POSTGRES_DB: hurricane_data
     ports:
       - '5432:5432'
     volumes:
@@ -47,8 +47,9 @@ services:
       retries: 10
 
   kestra:
-    env_file: .env_encoded
-    image: kestra/kestra:v1.1
+    env_file:
+      - .env_encoded
+    image: kestra/kestra:latest
     pull_policy: always
     # Note that this setup with a root user is intended for development purpose.
     # Our base image runs without root, but the Docker Compose implementation needs root to access the Docker socket
@@ -61,6 +62,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - /tmp/kestra-wd:/tmp/kestra-wd
     environment:
+      MICRONAUT_SECURITY_ENABLED: 'true'
       KESTRA_CONFIGURATION: |
         datasources:
           postgres:
@@ -70,9 +72,9 @@ services:
             password: k3str4
         kestra:
           server:
-            basicAuth:
-              username: "admin@kestra.io" # it must be a valid email address
-              password: Admin1234!
+            basic-auth:
+              username: "admin@kestra.io"
+              password: "Admin1234!"
           repository:
             type: postgres
           storage:

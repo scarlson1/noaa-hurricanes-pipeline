@@ -56,9 +56,6 @@ variables:
   int_table_name: 'hurricanes_{{ inputs.dataset }}'
   table: "{{ kv('GCP_DATASET') }}.{{ vars.int_table_name }}"
   data: "{{ outputs.download_csv.outputFiles['ibtracs.' ~ inputs.dataset ~ '.list.v04r01.csv']}}"
-  # data: "{{outputs.extract.outputFiles['ibtracs.' ~ inputs.dataset ~ '.list.v04r01.csv']}}"
-  # data: "{{outputs.extract.outputFiles[inputs.dataset ~ '_paths_' ~ inputs.year ~ '-' ~ inputs.basin ~ '.csv']}}"
-  # ibtracs.last3years.list.v04r01.csv
 
 tasks:
   - id: set_label
@@ -67,14 +64,21 @@ tasks:
       file: '{{render(vars.file)}}'
       dataset: '{{ inputs.dataset }}'
 
+  # - id: download_csv
+  #   type: io.kestra.plugin.scripts.shell.Commands
+  #   outputFiles:
+  #     - '*.csv'
+  #   taskRunner:
+  #     # type: io.kestra.plugin.core.runner.Process
+  #     type: io.kestra.plugin.ee.runner.Docker
+  #     image: alpine:latest
+  #     pullPolicy: IF_NOT_PRESENT
+  #   commands:
+  #     - wget -qO- https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/ibtracs.{{ inputs.dataset }}.list.v04r01.csv > {{ render(vars.file) }}
+
   - id: download_csv
-    type: io.kestra.plugin.scripts.shell.Commands
-    outputFiles:
-      - '*.csv'
-    taskRunner:
-      type: io.kestra.plugin.core.runner.Process
-    commands:
-      - wget -qO- https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/ibtracs.{{ inputs.dataset }}.list.v04r01.csv > {{ render(vars.file) }}
+    type: io.kestra.plugin.core.http.Download
+    uri: https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/ibtracs.{{ inputs.dataset }}.list.v04r01.csv
 
   # alternatively use wget or io.kestra.plugin.fs.local.Download if running locally
   # - id: download_csv
@@ -83,9 +87,9 @@ tasks:
   #   # saveAs: "{{render(vars.data)}}"
   - id: upload_to_gcs
     type: io.kestra.plugin.gcp.gcs.Upload
-    from: '{{ render(vars.data) }}'
+    # from: '{{ render(vars.data) }}'
+    from: '{{ outputs.download_csv.uri }}'
     to: '{{ render(vars.gcs_file) }}'
-    # from: "{{ outputs.download_csv.uri }}"
 
   - id: bq_table_create
     type: io.kestra.plugin.gcp.bigquery.Query
