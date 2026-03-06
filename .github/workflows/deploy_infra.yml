@@ -23,6 +23,7 @@ jobs:
           KESTRA_USER=${{ secrets.KESTRA_USER }}
           KESTRA_PASSWORD=${{ secrets.KESTRA_PASSWORD }}
           GEMINI_KEY=${{ secrets.GEMINI_KEY }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
           EOF
 
       - name: Generate .env_encoded (base64 - for Kestra secret store)
@@ -41,7 +42,7 @@ jobs:
           chmod 600 ~/.ssh/oracle-kestra
 
       - name: Write CockroachDB cert
-        run: echo '${{ secrets.COCKROACH_CA_CERT }}' | base64 -d > root.crt
+        run: echo '${{ secrets.COCKROACH_CA_CERT }}' > root.crt
 
       # alternatively, load from GCP secret manager
       # - name: Fetch CockroachDB cert from GCP Secret Manager

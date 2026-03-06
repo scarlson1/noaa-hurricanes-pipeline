@@ -116,7 +116,9 @@ docker system prune -v # and volumes
 
 ## Deployment
 
-TODO: documentation on creating VM (and use terraform ??)
+See [DEPLOYMENT.md](DEPLOYMENT.md) for deployment details
+
+<!--
 
 Deployed to an Oracle compute instance (GCP free tier insufficient for JVM). [Kestra docs for GCP VM](https://kestra.io/docs/installation/gcp-vm#create-a-vm-instance)
 
@@ -146,11 +148,26 @@ The following secrets are stored in GCP Secret Manager:
 - `DB_PASSWORD` - Cockroach DB password
 - `SLACK_WEBHOOK_URL` - slack url for notifications
 
+The following secrets need to be created in github:
+
+- `COCKROACH_CA_CERT` - cockroach certificate
+- `COCKROACH_PASSWORD`
+- `GCP_SERVICE_ACCOUNT_JSON` - created by terraform
+- `GEMINI_KEY`
+- `KESTRA_PASSWORD` - signing into Kestra dashboard
+- `KESTRA_USER` - signing into Kestra dashboard
+- `OCI_SSH_PRIVATE_KEY`
+- `OCI_VM_IP`
+- `POSTGRES_PASSWORD`
+- `SLACK_WEBHOOK_URL`
+
+`deploy_infra.yml` Github workflow copies secrets into .env and .env_encoded on VM.
+
 **Manual option:**
 
-- create .env_encoded
+- create .env_encoded & .env
 - copy over base64 encoded secrets
-- secrets must be prepended with `SECRET_`
+- encoded secrets must be prepended with `SECRET_`
 
 **Script:**
 
@@ -381,6 +398,47 @@ Ensure docker automatically starts on reboot:
 sudo systemctl enable docker.service
 ```
 
+### Set up systemd service to automatically start on boot
+
+**Only required once**
+
+```bash
+# Create kestra directory if it doesn't exist
+mkdir -p ~/kestra/certs
+
+# Install the systemd service
+sudo tee /etc/systemd/system/kestra.service > /dev/null <<'EOF'
+[Unit]
+Description=Kestra Workflow Engine
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=opc
+WorkingDirectory=/home/opc/kestra
+ExecStart=/usr/bin/docker compose -f docker-compose-oracle.yaml up
+ExecStop=/usr/bin/docker compose -f docker-compose-oracle.yaml down
+Restart=always
+RestartSec=10
+TimeoutStopSec=90
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Register and enable it
+sudo systemctl daemon-reload
+sudo systemctl enable kestra
+```
+
+Once files are copied over (compose.yml, .env, etc.):
+
+```bash
+sudo systemctl start kestra
+sudo journalctl -u kestra -f  # watch logs
+```
+
 **Connect to UI:**
 
 IP: 147.224.210.83
@@ -445,7 +503,7 @@ terraform import module.gcp.google_bigquery_dataset.kestra_dataset <gcp-project-
 ### Step 1 — Bootstrap the VM (one time)
 
 ```bash
-ssh -i ~/.ssh/oracle-kestra opc@129.146.100.119 'bash -s' < bootstrap.sh
+ssh -i ~/.ssh/oracle-kestra opc@147.224.210.83 'bash -s' < bootstrap.sh
 ```
 
 This installs Docker, creates the ~/kestra directory, and registers the systemd service.
@@ -453,7 +511,7 @@ This installs Docker, creates the ~/kestra directory, and registers the systemd 
 ### Step 2 — Copy secrets and start Kestra (one time)
 
 ```bash
-bashVM="opc@129.146.100.119"
+bashVM="opc@147.224.210.83"
 OPTS="-o StrictHostKeyChecking=no -i ~/.ssh/oracle-kestra"
 
 scp $OPTS docker-compose-oracle.yaml $VM:~/kestra/
@@ -469,7 +527,7 @@ ssh $OPTS $VM "sudo journalctl -u kestra -f"  # watch logs
 Go to your repo → Settings → Secrets → Actions and add:
 
 SecretValue
-OCI_VM_IP 129.146.100.119
+OCI_VM_IP 147.224.210.83
 OCI_SSH_PRIVATE_KEY contents of ~/.ssh/oracle-kestra
 GCP_SERVICE_ACCOUNT_JSON contents of service-account.json
 KESTRA_USER spencercarlson@mac.com
@@ -491,7 +549,7 @@ One thing to fix in your compose file — the .env_encoded reference should beco
 **1. Run the bootstrap script on the VM**
 
 ```bash
-ssh -i ~/.ssh/oracle-kestra opc@129.146.100.119 'bash -s' < bootstrap.sh
+ssh -i ~/.ssh/oracle-kestra opc@147.224.210.83 'bash -s' < bootstrap.sh
 ```
 
 This installs Docker, creates the ~/kestra directory, and registers the systemd service.
@@ -515,7 +573,7 @@ The filename changes from `service-account.json` to `kestra-sa.json`, everything
 **4. Copy files to the VM**
 
 ```bash
-VM="opc@129.146.100.119"
+VM="opc@147.224.210.83"
 OPTS="-i ~/.ssh/oracle-kestra"
 
 scp $OPTS docker-compose-oracle.yaml    $VM:~/kestra/
@@ -532,6 +590,6 @@ ssh $OPTS $VM "sudo systemctl start kestra"
 ssh $OPTS $VM "sudo journalctl -u kestra -f"
 ```
 
-You should see Postgres start first, then Kestra connect to it and begin listening on port 8080. Once you see something like `Kestra is ready` in the logs, hit `http://129.146.100.119:8080` in your browser.
+You should see Postgres start first, then Kestra connect to it and begin listening on port 8080. Once you see something like `Kestra is ready` in the logs, hit `http://147.224.210.83:8080` in your browser.
 
-**6. Add GitHub secrets and push the workflow files** — once Kestra is confirmed running, set up the Actions secrets and drop the two workflow yml files into `.github/workflows/` so future deploys are automated.
+**6. Add GitHub secrets and push the workflow files** — once Kestra is confirmed running, set up the Actions secrets and drop the two workflow yml files into `.github/workflows/` so future deploys are automated. -->

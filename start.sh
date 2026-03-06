@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+# DEPRECATED: REPLACED BY GITHUB ACTIONS
+
 GCLOUD=/home/opc/google-cloud-sdk/bin/gcloud
 DOCKER=/usr/bin/docker
 KEYFILE=/home/opc/app/service-account.json
