@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+# DEPRECATED: REPLACED BY GITHUB ACTIONS
+
 # Paths
 ENV_FILE=/home/opc/app/.env_encoded
 GCLOUD=/home/opc/google-cloud-sdk/bin/gcloud
