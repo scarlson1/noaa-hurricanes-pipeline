@@ -21,8 +21,10 @@ description: |
 triggers:
   - id: upstream_dependency
     type: io.kestra.plugin.core.trigger.Flow
+    # inputs:
+    #   year: '{{ trigger.inputs.year }}'
     inputs:
-      year: '{{ trigger.inputs.year }}'
+      year: "{{ trigger.outputs.year | default(trigger.inputs.year | default(now() | date('yyyy'))) }}"
     preconditions:
       id: flow_trigger
       flows:
