@@ -80,11 +80,6 @@ tasks:
     type: io.kestra.plugin.core.http.Download
     uri: https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/ibtracs.{{ inputs.dataset }}.list.v04r01.csv
 
-  # alternatively use wget or io.kestra.plugin.fs.local.Download if running locally
-  # - id: download_csv
-  #   type: io.kestra.plugin.core.http.Download
-  #   uri: https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/ibtracs.{{inputs.dataset}}.list.v04r01.csv
-  #   # saveAs: "{{render(vars.data)}}"
   - id: upload_to_gcs
     type: io.kestra.plugin.gcp.gcs.Upload
     # from: '{{ render(vars.data) }}'

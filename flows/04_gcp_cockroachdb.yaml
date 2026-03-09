@@ -3,26 +3,9 @@ namespace: hurricanes
 description: |
   Import data into cochroach db
 
-# TODO: need to default to current year if triggered by other flow
-
-# https://kestra.io/docs/best-practices/flows#flow-trigger-on-state-change
-# triggers:
-#   - id: upstream_dependency
-#     type: io.kestra.plugin.core.trigger.Flow
-#     inputs:
-#       year: '{{ trigger.inputs.year }}'
-#     conditions:
-#       - type: io.kestra.plugin.core.condition.ExecutionFlow
-#         namespace: hurricanes
-#         flowId: 03_gcp_paths
-#       - type: io.kestra.plugin.core.condition.ExecutionStatus
-#         in:
-#           - SUCCESS
 triggers:
   - id: upstream_dependency
     type: io.kestra.plugin.core.trigger.Flow
-    # inputs:
-    #   year: '{{ trigger.inputs.year }}'
     inputs:
       year: "{{ trigger.outputs.year | default(trigger.inputs.year | default(now() | date('yyyy'))) }}"
     preconditions:
@@ -60,12 +43,8 @@ variables:
   gcs_file: "gs://{{kv('GCP_BUCKET_NAME')}}/{{vars.file}}"
 
 tasks:
-  # get data that has minimum sshs of at least 1
-  # CREATE OR REPLACE TABLE `{{ kv('GCP_PROJECT_ID') }}.{{ render(vars.table) }}_{{ inputs.year }}_min{{ inputs.min_category }}_tmp`
-  # AS
   - id: extract_from_bigquery
     type: io.kestra.plugin.gcp.bigquery.Query
-    # fetchType: STORE
     sql: |
       CREATE OR REPLACE TABLE `{{ render(vars.bq_curated_table) }}` AS
       SELECT
@@ -215,67 +194,6 @@ tasks:
   # - id: notify_download_complete_added_count
   #   type: io.kestra.plugin.core.log.Log
   #   message: 'Added {{ (outputs.count_post_merge.value | default(0) | int) - (outputs.count_pre_merge.value | default(0) | int) }} new rows'
-
-  # - id: load_into_cockroach
-  #   type: io.kestra.plugin.jdbc.postgresql.Batch
-  #   url: jdbc:postgresql://{{ render(vars.db_host)}}:{{ render(vars.db_port) }}/{{ render(vars.database) }}?sslmode=verify-full&sslrootcert=/app/certs/root.crt
-  #   username: "{{ render(vars.db_user )}}"
-  #   password: "{{ secret('COCKROACH_PASSWORD') }}"
-  #   # sslRootCert: /app/certs/root.crt
-  #   # sslCert: /app/certs/client.crt
-  #   # sslKey: /app/certs/client.key
-  #   from: "{{ outputs.extract_from_bigquery.uri }}"
-  #   sql: |
-  #     INSERT INTO {{ vars.target_table }}
-  #     VALUES (
-  #       ?,
-  #       ?,
-  #       ?,
-  #       ?,
-  #       ?,
-  #       ?,
-  #       ?,
-  #       ?,
-  #       ?,
-  #       ?,
-  #       ?,
-  #       ?
-  #     )
-  #     ON CONFLICT (unique_row_id) DO NOTHING;
-  # sql: |
-  #   INSERT INTO {{ vars.target_table }} (
-  #     name,
-  #     sid,
-  #     basin,
-  #     season,
-  #     iso_time,
-  #     usa_sshs,
-  #     nature,
-  #     latitude,
-  #     longitude,
-  #     usa_status,
-  #     timestamp,
-  #     unique_row_id,
-  #     year,
-  #     category
-  #   )
-  #   VALUES (
-  #     :name,
-  #     :sid,
-  #     :basin,
-  #     :season,
-  #     :iso_time,
-  #     :usa_sshs,
-  #     :nature,
-  #     :latitude::NUMERIC,
-  #     :longitude::NUMERIC,
-  #     :usa_status,
-  #     :timestamp,
-  #     :unique_row_id,
-  #     :year,
-  #     :category
-  #   )
-  #   ON CONFLICT (unique_row_id) DO NOTHING;
 
   - id: purge_files
     type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles

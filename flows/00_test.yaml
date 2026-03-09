@@ -1,7 +1,0 @@
-id: 00_test
-namespace: hurricanes
-
-tasks:
-  - id: log_message
-    type: io.kestra.plugin.core.log.Log
-    message: 'Hello world (test deployment from github workflow)'
