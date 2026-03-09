@@ -6,29 +6,29 @@ description: |
 # TODO: need to default to current year if triggered by other flow
 
 # https://kestra.io/docs/best-practices/flows#flow-trigger-on-state-change
-triggers:
-  - id: upstream_dependency
-    type: io.kestra.plugin.core.trigger.Flow
-    inputs:
-      year: '{{ trigger.inputs.year }}'
-    conditions:
-      - type: io.kestra.plugin.core.condition.ExecutionFlow
-        namespace: hurricanes
-        flowId: 03_gcp_paths
-      - type: io.kestra.plugin.core.condition.ExecutionStatus
-        in:
-          - SUCCESS
 # triggers:
 #   - id: upstream_dependency
 #     type: io.kestra.plugin.core.trigger.Flow
 #     inputs:
 #       year: '{{ trigger.inputs.year }}'
-#     preconditions:
-#       id: flow_trigger
-#       flows:
-#         - namespace: hurricanes
-#           flowId: 03_gcp_paths
-#           states: [SUCCESS]
+#     conditions:
+#       - type: io.kestra.plugin.core.condition.ExecutionFlow
+#         namespace: hurricanes
+#         flowId: 03_gcp_paths
+#       - type: io.kestra.plugin.core.condition.ExecutionStatus
+#         in:
+#           - SUCCESS
+triggers:
+  - id: upstream_dependency
+    type: io.kestra.plugin.core.trigger.Flow
+    inputs:
+      year: '{{ trigger.inputs.year }}'
+    preconditions:
+      id: flow_trigger
+      flows:
+        - namespace: hurricanes
+          flowId: 03_gcp_paths
+          states: [SUCCESS]
 
 inputs:
   - id: year
