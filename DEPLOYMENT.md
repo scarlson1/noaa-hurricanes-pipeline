@@ -13,7 +13,7 @@ This document covers the complete setup and ongoing deployment of the Hurricanes
 | Component       | Details                                                            |
 | --------------- | ------------------------------------------------------------------ |
 | OCI VM          | VM.Standard.A1.Flex — 1 OCPU, 6 GB RAM — Oracle Linux              |
-| Kestra          | v1.3 — Docker Compose — standalone mode with Postgres backend      |
+| Kestra          | Docker Compose — standalone mode with Postgres backend             |
 | GCS Bucket      | `hurricanes_pipeline_kestra` — US multi-region                     |
 | BigQuery        | `historical-paths` project — `hurricane_data` dataset              |
 | CockroachDB     | `idemand-db-cluster-14272.5xj.gcp-us-central1.cockroachlabs.cloud` |
@@ -28,8 +28,8 @@ This document covers the complete setup and ongoing deployment of the Hurricanes
 
 - Terraform >= 1.5
 - OCI CLI — configured with `~/.oci/oci_api_key.pem`
-- gcloud CLI — authenticated to the `historical-paths` project
-- SSH key pair — `~/.ssh/oracle-kestra` and `~/.ssh/oracle-kestra.pub`
+- gcloud CLI — authenticated to the target GCP project
+- SSH key pair for the Oracle (or any deployment VM)
 
 ### Verify Installations
 
@@ -37,7 +37,7 @@ This document covers the complete setup and ongoing deployment of the Hurricanes
 terraform -version
 oci --version
 gcloud --version
-ls ~/.ssh/oracle-kestra*
+ls ~/.ssh/[KEY_NAME]*
 ```
 
 ### OCI API Key Setup
@@ -115,7 +115,7 @@ terraform init
 
 ### 3.4 Importing Existing Resources
 
-Since the VM, GCS bucket, and BigQuery dataset were created before Terraform, they must be imported into state before the first apply. Run these once:
+Since the VM, GCS bucket, and BigQuery dataset were created before Terraform, they must be imported into state before the first apply. If resources have already been crated, run these once:
 
 ```bash
 # OCI instance
@@ -128,10 +128,10 @@ terraform import module.oci.oci_core_vcn.kestra_vcn <vcn-ocid>
 terraform import module.oci.oci_core_subnet.kestra_subnet <subnet-ocid>
 
 # GCS bucket
-terraform import module.gcp.google_storage_bucket.kestra_bucket hurricanes_pipeline_kestra
+terraform import module.gcp.google_storage_bucket.kestra_bucket [BUCKET_NAME]
 
 # BigQuery dataset
-terraform import module.gcp.google_bigquery_dataset.kestra_dataset historical-paths/hurricane_data
+terraform import module.gcp.google_bigquery_dataset.kestra_dataset [PROJECT_ID]/[DATASET_NAME]
 ```
 
 Get OCI resource OCIDs using the CLI:
@@ -227,6 +227,8 @@ Host hurricanes_pipeline
   AddKeysToAgent yes
 ```
 
+> If using Cursor/VS Code, you can connect using the "><" button in the bottom left corner.
+
 ### 4.2 Install systemd Service
 
 Run these commands on the VM to register Kestra as a system service that starts automatically on boot:
@@ -295,6 +297,8 @@ Kestra is ready when logs show it listening on port 8080. The UI is then accessi
 http://147.224.210.83:8080
 ```
 
+The public IP is an output from terraform or it can be found in the cloud provider's dashboard.
+
 ### 4.5 Useful systemd Commands
 
 ```bash
@@ -313,11 +317,11 @@ Kestra uses two separate env files for different purposes. Both must be present 
 
 ### 5.1 `.env` — Docker Compose Variables
 
-Plain `key=value` pairs read by Docker Compose for `${VAR}` interpolation in `docker-compose-oracle.yaml`. **Not** base64 encoded.
+Plain `key=value` pairs read by Docker Compose for `${VAR}` interpolation in `compose.yaml`. **Not** base64 encoded.
 
 ```bash
 POSTGRES_PASSWORD=<strong-password>
-KESTRA_USER=spencercarlson@mac.com
+KESTRA_USER=example@gmail.com
 KESTRA_PASSWORD=<kestra-ui-password>
 GEMINI_KEY=<gemini-api-key>
 ```
@@ -352,6 +356,8 @@ The GCP service account JSON key mounted into the Kestra container at `/.gcp/cre
 ```bash
 terraform output -raw kestra_sa_key | base64 -d > kestra-sa.json
 ```
+
+The service account created by terraform is copied over to the VM in `deploy_infra.yml` github flow.
 
 ---
 
@@ -420,14 +426,6 @@ cat path/to/root.crt | base64 | pbcopy   # copies to clipboard (macOS)
 ## 7. CockroachDB SSL Certificate
 
 Kestra flows connect to CockroachDB using SSL with `sslmode=verify-full`. The root certificate must be present on the VM at `~/kestra/certs/root.crt`, which Docker Compose mounts into the container at `/app/certs/root.crt`.
-
-### JDBC Connection String
-
-```
-jdbc:postgresql://idemand-db-cluster-14272.5xj.gcp-us-central1.cockroachlabs.cloud
-  :26257/historical_paths
-  ?sslmode=verify-full&sslrootcert=/app/certs/root.crt
-```
 
 ### Certificate Deployment
 

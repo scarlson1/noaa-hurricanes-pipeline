@@ -77,7 +77,7 @@ services:
     image: kestra/kestra:latest
     env_file:
       - .env_encoded
-    # ... other configurations
+    # ...
 ```
 
 **Start docker compose:**
@@ -117,6 +117,11 @@ docker system prune -v # and volumes
 ## Deployment
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for deployment details
+
+## TODO
+
+- env vars for DB, etc.
+- better updating (update DB if data changes, instead of skipping existing rows)
 
 <!--
 
