@@ -45,6 +45,10 @@ Resource Links:
 - truncate staging table
 - send status notification to Slack
 
+### Updating / adding Kestra flows
+
+Kestra flows are automatically deployed by [`deploy_flows.yaml`](.github/workflows//deploy_flows.yml) github action when added to `main` branch.
+
 ---
 
 ## Running Locally
